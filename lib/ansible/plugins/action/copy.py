@@ -199,9 +199,6 @@ class ActionModule(ActionBase):
                     if tmp is None or "-tmp-" not in tmp:
                         tmp = self._make_tmp_path(remote_user)
 
-                if self._play_context.diff and not raw:
-                    diffs.append(self._get_diff_data(dest_file, source_full, task_vars))
-
                 if self._play_context.check_mode:
                     self._remove_tempfile_if_content_defined(content, content_tempfile)
                     changed = True
@@ -278,6 +275,8 @@ class ActionModule(ActionBase):
             # the copy module uses 'dest', so add it if it's not there
             if 'path' in module_return and 'dest' not in module_return:
                 module_return['dest'] = module_return['path']
+            if 'diff' in module_return:
+                diffs.append(module_return['diff'])
 
         # Delete tmp path if we were recursive or if we did not execute a module.
         if (not C.DEFAULT_KEEP_REMOTE_FILES and not delete_remote_tmp) or (not C.DEFAULT_KEEP_REMOTE_FILES and delete_remote_tmp and not module_executed):

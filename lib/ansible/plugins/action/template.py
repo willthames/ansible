@@ -144,60 +144,18 @@ class ActionModule(ActionBase):
             tmp = self._make_tmp_path(remote_user)
             cleanup_remote_tmp = True
 
-        local_checksum = checksum_s(resultant)
-        remote_checksum = self.get_checksum(dest, task_vars, not directory_prepended, source=source, tmp=tmp)
-        if isinstance(remote_checksum, dict):
-            # Error from remote_checksum is a dict.  Valid return is a str
-            result.update(remote_checksum)
-            return result
-
-        diff = {}
         new_module_args = self._task.args.copy()
 
-        if (remote_checksum == '1') or (force and local_checksum != remote_checksum):
-
-            result['changed'] = True
-            # if showing diffs, we need to get the remote value
-            if self._play_context.diff:
-                diff = self._get_diff_data(dest, resultant, task_vars, source_file=False)
-
-            if not self._play_context.check_mode: # do actual work thorugh copy
-                xfered = self._transfer_data(self._connection._shell.join_path(tmp, 'source'), resultant)
-
-                # fix file permissions when the copy is done as a different user
-                self._fixup_perms(tmp, remote_user, recursive=True)
-
-                # run the copy module
-                new_module_args.update(
-                   dict(
-                       src=xfered,
-                       dest=dest,
-                       original_basename=os.path.basename(source),
-                       follow=True,
-                    ),
-                )
-                result.update(self._execute_module(module_name='copy', module_args=new_module_args, task_vars=task_vars, tmp=tmp, delete_remote_tmp=False))
-
-            if result.get('changed', False) and self._play_context.diff:
-                result['diff'] = diff
-
-        else:
-            # when running the file module based on the template data, we do
-            # not want the source filename (the name of the template) to be used,
-            # since this would mess up links, so we clear the src param and tell
-            # the module to follow links.  When doing that, we have to set
-            # original_basename to the template just in case the dest is
-            # a directory.
-            new_module_args.update(
-                dict(
-                    src=None,
-                    original_basename=os.path.basename(source),
-                    follow=True,
-                ),
-            )
-            result.update(self._execute_module(module_name='file', module_args=new_module_args, task_vars=task_vars, tmp=tmp, delete_remote_tmp=False))
-
-        if tmp and cleanup_remote_tmp:
-            self._remove_tmp_path(tmp)
+        # run the copy module
+        new_module_args.update(
+            dict(
+                src=source,
+                content=resultant,
+                dest=dest,
+                original_basename=os.path.basename(source),
+                follow=True,
+            ),
+        )
+        result.update(self._execute_module(module_name='copy', module_args=new_module_args, task_vars=task_vars, tmp=tmp, delete_remote_tmp=False))
 
         return result
