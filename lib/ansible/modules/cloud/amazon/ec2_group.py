@@ -170,14 +170,13 @@ EXAMPLES = '''
 import re
 import time
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.ec2 import ec2_connect, ec2_argument_spec
+from ansible.module_utils.ec2 import boto3_conn, get_aws_connection_info
+from ansible.module_utils.ec2 import camel_dict_to_snake_dict, HAS_BOTO3
 
 try:
-    import boto.ec2
-    from boto.ec2.securitygroup import SecurityGroup
-    HAS_BOTO = True
+    import botocore
 except ImportError:
-    HAS_BOTO = False
+    pass  # caught by imported HAS_BOTO3
 
 
 def make_rule_key(prefix, rule, group_id, cidr_ip):
@@ -353,25 +352,25 @@ def rules_expand_sources(rules):
 
 def main():
     argument_spec = ec2_argument_spec()
-    argument_spec.update(dict(
-        name=dict(type='str', required=True),
-        description=dict(type='str', required=True),
-        vpc_id=dict(type='str'),
-        rules=dict(type='list'),
-        rules_egress=dict(type='list'),
-        state = dict(default='present', type='str', choices=['present', 'absent']),
-        purge_rules=dict(default=True, required=False, type='bool'),
-        purge_rules_egress=dict(default=True, required=False, type='bool'),
-
-    )
+    argument_spec.update(
+        dict(
+            name=dict(required=True),
+            description=dict(required=True),
+            vpc_id=dict(),
+            rules=dict(type='list'),
+            rules_egress=dict(type='list'),
+            state = dict(default='present', choices=['present', 'absent']),
+            purge_rules=dict(default=True, type='bool'),
+            purge_rules_egress=dict(default=True, type='bool'),
+        )
     )
     module = AnsibleModule(
         argument_spec=argument_spec,
         supports_check_mode=True,
     )
 
-    if not HAS_BOTO:
-        module.fail_json(msg='boto required for this module')
+    if not HAS_BOTO3:
+        module.fail_json(msg='boto3 and botocore are required for this module')
 
     name = module.params['name']
     description = module.params['description']
@@ -384,22 +383,17 @@ def main():
 
     changed = False
 
-    ec2 = ec2_connect(module)
+    region, url, aws_connect_kwargs = get_aws_connection_info(module, boto3=True)
+    client = boto3_conn(module, conn_type='client', resource='ec2', region=region,
+                        endpoint=ec2_url, **aws_connect_kwargs)
 
     # find the group if present
-    group = None
-    groups = {}
-    for curGroup in ec2.get_all_security_groups():
-        groups[curGroup.id] = curGroup
-        if curGroup.name in groups:
-            # Prioritise groups from the current VPC
-            if vpc_id is None or curGroup.vpc_id == vpc_id:
-                groups[curGroup.name] = curGroup
-        else:
-            groups[curGroup.name] = curGroup
-
-        if curGroup.name == name and (vpc_id is None or curGroup.vpc_id == vpc_id):
-            group = curGroup
+    filters = {'group-name': name }
+    if vpc_id:
+        filters['vpc-id'] = vpc_id
+    results = client.describe_security_groups(Filters=ansible_filter_dict_to_boto3_filter_list(filters))
+    if results['SecurityGroups']:
+        group = results['SecurityGroups'][0]
 
     # Ensure requested group is absent
     if state == 'absent':
@@ -407,27 +401,26 @@ def main():
             '''found a match, delete it'''
             try:
                 if not module.check_mode:
-                    group.delete()
-            except Exception as e:
-                module.fail_json(msg="Unable to delete security group '%s' - %s" % (group, e))
+                    client.delete_security_group(GroupId=group['GroupId'])
+            except botocore.exceptions.ClientError as e:
+                module.fail_json(msg="Unable to delete security group '%s' - %s" % (group, e),
+                                 exception=traceback.format_exc,
+                                 **camel_dict_to_snake_dict(e.response))
             else:
-                group = None
-                changed = True
+                module.exit_json(changed=True, group=None)
         else:
-            '''no match found, no changes required'''
+            module.exit_json(changed=False, group=None)
 
     # Ensure requested group is present
     elif state == 'present':
         if group:
             '''existing group found'''
             # check the group parameters are correct
-            group_in_use = False
-            rs = ec2.get_all_instances()
-            for r in rs:
-                for i in r.instances:
-                    group_in_use |= reduce(lambda x, y: x | (y.name == 'public-ssh'), i.groups, False)
+            filters = dict(Name='group-name', Values=[name])
+            rs = ec2.describe_instances(Filters=filters)['Reservations']['Instances']
+            group_in_use = not not rs
 
-            if group.description != description:
+            if group['Description'] != description:
                 if group_in_use:
                     module.fail_json(msg="Group description does not match, but it is in use so cannot be changed.")
 
@@ -435,20 +428,18 @@ def main():
         else:
             '''no match found, create it'''
             if not module.check_mode:
-                group = ec2.create_security_group(name, description, vpc_id=vpc_id)
+                group = ec2.create_security_group(GroupName=name, Description=description, VpcId=vpc_id)
 
                 # When a group is created, an egress_rule ALLOW ALL
                 # to 0.0.0.0/0 is added automatically but it's not
                 # reflected in the object returned by the AWS API
                 # call. We re-read the group for getting an updated object
                 # amazon sometimes takes a couple seconds to update the security group so wait till it exists
-                while len(ec2.get_all_security_groups(filters={ 'group_id': group.id, })) == 0:
+                while not ec2.describe_security_groups(GroupIds=[group['GroupId']])['SecurityGroups']:
                     time.sleep(0.1)
 
-                group = ec2.get_all_security_groups(group_ids=(group.id,))[0]
+                group = ec2.describe_security_groups(GroupIds=[group['GroupId']])['SecurityGroups'][0]
             changed = True
-    else:
-        module.fail_json(msg="Unsupported state requested: %s" % state)
 
     # create a lookup for all existing rules on the group
     if group:
