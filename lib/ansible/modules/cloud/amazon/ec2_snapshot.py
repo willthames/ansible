@@ -71,7 +71,7 @@ options:
     version_added: "1.9"
   snapshot_id:
     description:
-      - snapshot id to remove
+      - snapshot id to remove or modify
     required: false
     version_added: "1.9"
   last_snapshot_min_age:
@@ -80,6 +80,14 @@ options:
     required: false
     default: 0
     version_added: "2.0"
+  create_volume_permission:
+    description:
+      - Users and groups that should be able to create a volume from a snapshot.
+        Dictionary with a key of user_ids and/or group_names. user_ids should
+        be a list of account ids. group_name should be a list of groups, "all"
+        is the only acceptable value currently.
+    required: false
+    version_added: "2.4"
 
 author: "Will Thames (@willthames)"
 extends_documentation_fragment:
@@ -108,26 +116,35 @@ EXAMPLES = '''
         source: /data
 
 # Remove a snapshot
-- local_action:
-    module: ec2_snapshot
+- ec2_snapshot:
     snapshot_id: snap-abcd1234
     state: absent
 
 # Create a snapshot only if the most recent one is older than 1 hour
-- local_action:
-    module: ec2_snapshot
+- ec2_snapshot:
     volume_id: vol-abcdef12
     last_snapshot_min_age: 60
+
+# Allow account 1234567890 to access a snapshot
+- ec2_snapshot:
+    snapshot_id: snap-abcd1234
+    create_volume_permissions:
+      user_ids:
+      - '1234567890'
 '''
 
-import time
 import datetime
+import time
+import traceback
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.ec2 import get_aws_connection_info, boto3_conn, ec2_argument_spec
+from ansible.module_utils.ec2 import camel_dict_to_snake_dict, HAS_BOTO3
 
 try:
-    import boto.ec2
-    HAS_BOTO = True
+    import botocore
 except ImportError:
-    HAS_BOTO = False
+    pass  # caught by imported HAS_BOTO3
 
 
 # Find the most recent snapshot
@@ -182,73 +199,144 @@ def _create_with_wait(snapshot, wait_timeout_secs, sleep_func=time.sleep):
     return True
 
 
+def existing_to_desired(existing_list, desired_list):
+    """
+       Takes two lists and returns the elements that need
+       to be added to the existing_list and the elements
+       that need to be removed from the existing_list to
+       become the desired_list
+    """
+
+    return list(set(desired_list) - set(existing_list)), list(set(existing_list) - set(desired_list))
+
+def remove_snapshot(module, ec2, snapshot_id, wait, wait_timeout):
+    try:
+        snapshots = ec2.describe_snapshots(SnapshotIds=[snapshot_id])['Snapshots']
+    except botocore.exceptions.ClientError as e:
+        module.fail_json(msg="Could not query existing snapshots",
+                         exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+    if snapshots:
+        if not module.check_mode:
+            try:
+                 ec2.delete_snapshot(SnapshotId=snapshot_id)
+            except botocore.exceptions.ClientError as e:
+                # exception is raised if snapshot does not exist
+                # should only happen in a race condition
+                if e['Error']['Code'] == 'InvalidSnapshot.NotFound':
+                    module.exit_json(changed=False)
+                else:
+                    module.fail_json(msg="Failed to delete snapshot",
+                                     exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+        # successful delete
+        module.exit_json(changed=True)
+    else:
+        module.exit_json(changed=False)
+
+
 def create_snapshot(module, ec2, state=None, description=None, wait=None,
                     wait_timeout=None, volume_id=None, instance_id=None,
                     snapshot_id=None, device_name=None, snapshot_tags=None,
-                    last_snapshot_min_age=None):
+                    last_snapshot_min_age=None, create_volume_permissions=None):
     snapshot = None
     changed = False
 
-    required = [volume_id, snapshot_id, instance_id]
-    if required.count(None) != len(required) - 1: # only 1 must be set
-        module.fail_json(msg='One and only one of volume_id or instance_id or snapshot_id must be specified')
-    if instance_id and not device_name or device_name and not instance_id:
-        module.fail_json(msg='Instance ID and device name must both be specified')
-
     if instance_id:
         try:
-            volumes = ec2.get_all_volumes(filters={'attachment.instance-id': instance_id, 'attachment.device': device_name})
-        except boto.exception.BotoServerError as e:
-            module.fail_json(msg = "%s: %s" % (e.error_code, e.error_message))
+            volumes = ec2.describe_volumes(Filters=[{'Name': 'attachment.instance-id', 'Values': [instance_id]},
+                                                    {'Name': 'attachment.device', 'Values': [device_name]}])
+        except botocore.exceptions.ClientError as e:
+            module.fail_json(msg="Could not query volumes attached to instance %s" % instance_id,
+                             exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
 
         if not volumes:
             module.fail_json(msg="Could not find volume with name %s attached to instance %s" % (device_name, instance_id))
 
-        volume_id = volumes[0].id
-
-    if state == 'absent':
-        if not snapshot_id:
-            module.fail_json(msg = 'snapshot_id must be set when state is absent')
-        try:
-            ec2.delete_snapshot(snapshot_id)
-        except boto.exception.BotoServerError as e:
-            # exception is raised if snapshot does not exist
-            if e.error_code == 'InvalidSnapshot.NotFound':
-                module.exit_json(changed=False)
-            else:
-                module.fail_json(msg = "%s: %s" % (e.error_code, e.error_message))
-
-        # successful delete
-        module.exit_json(changed=True)
+        volume_id = volumes['Volumes'][0]['VolumeId']
 
     if last_snapshot_min_age > 0:
         try:
-            current_snapshots = ec2.get_all_snapshots(filters={'volume_id': volume_id})
-        except boto.exception.BotoServerError as e:
-            module.fail_json(msg="%s: %s" % (e.error_code, e.error_message))
+            current_snapshots = ec2.describe_snapshots(Filters=[{'Name': 'volume_id', 'Values': [volume_id]}])
+        except botocore.exceptions.ClientError as e:
+            module.fail_json(msg="Could not query snapshots taken from volume %s" % volume_id,
+                             exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
 
         last_snapshot_min_age = last_snapshot_min_age * 60 # Convert to seconds
         snapshot = _get_most_recent_snapshot(current_snapshots,
                                              max_snapshot_age_secs=last_snapshot_min_age)
-    try:
-        # Create a new snapshot if we didn't find an existing one to use
-        if snapshot is None:
-            snapshot = ec2.create_snapshot(volume_id, description=description)
+    if snapshot_id:
+        try:
+            snapshots = ec2.describe_snapshots(SnapshotIds=[snapshot_id])['Snapshots']
+        except botocore.exceptions.ClientError as e:
+            module.fail_json(msg="Could not query existing snapshots",
+                             exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+    # Create a new snapshot if we didn't find an existing one to use
+    if snapshots is None:
+        if not module.check_mode:
+            try:
+                snapshot = ec2.create_snapshot(volume_id, description=description)
+            except botocore.exceptions.ClientError as e:
+                module.fail_json(msg="Could not create snapshot",
+                                 exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+        else:
+            snapshot = fake_snapshot(volume_id)
+        changed = True
+    else:
+        snapshot = snapshots[0]
+    if wait:
+        if not _create_with_wait(snapshot, wait_timeout):
+            module.fail_json(msg='Timed out while creating snapshot.')
+
+    if snapshot_tags:
+        tags_to_add, tags_to_remove = existing_to_desired(boto3_tag_list_to_ansible_dict(snapshot['Tags'].items()),
+                                                          snapshot_tags.items())
+        if tags_to_remove:
+            if not module.check_mode:
+                try:
+                    ec2.delete_tag(Resources=[snapshot_id], Tags=ansible_tag_dict_to_boto3_list(tags_to_add))
+                except botocore.exceptions.ClientError as e:
+                    module.fail_json(msg="Could not remove tags from snapshot",
+                                     exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
             changed = True
-        if wait:
-            if not _create_with_wait(snapshot, wait_timeout):
-                module.fail_json(msg='Timed out while creating snapshot.')
-        if snapshot_tags:
-            for k, v in snapshot_tags.items():
-                snapshot.add_tag(k, v)
-    except boto.exception.BotoServerError as e:
-        module.fail_json(msg="%s: %s" % (e.error_code, e.error_message))
+        if tags_to_add:
+            if not module.check_mode:
+                try:
+                    ec2.create_tag(Resources=[snapshot_id], Tags=ansible_tag_dict_to_boto3_list(tags_to_add))
+                except botocore.exceptions.ClientError as e:
+                    module.fail_json(msg="Could not tag snapshot",
+                                     exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+            changed = True
+
+    if create_volume_permissions:
+        permissions = ec2.describe_snapshot_attribute(SnapshotId=snapshot_id, Attribute='createVolumePermission')
+        desired_user_perms = [str(user_id) for user_id in create_volume_permissions.get('user_ids', [])]
+        desired_group_perms = create_volume_permissions.get('groups', [])
+
+        users_to_add, users_to_remove = existing_to_desired([cvp['UserId'] for cvp in permissions['CreateVolumePermissions']
+                                                             if 'UserId' in cvp], desired_user_perms)
+        groups_to_add, groups_to_remove = existing_to_desired([cvp['Group'] for cvp in permissions['CreateVolumePermissions']
+                                                               if 'Group' in cvp], desired_group_perms)
+
+        if users_to_add or groups_to_add or users_to_remove or groups_to_remove:
+            if module.check_mode:
+                permissions = desired_user_perms
+            else:
+                try:
+                    ec2.modify_snapshot_attribute(
+                        SnapshotId=snapshot_id,
+                        Add=[{'UserId': userid} for userid in users_to_add] + [{'Group': group} for group in groups_to_add],
+                        Remove=[{'UserId': userid} for userid in users_to_remove] + [{'Group': group} for group in groups_to_remove])
+                except botocore.exceptions.ClientError as e:
+                    module.fail_json(msg="Could not update volume permissions",
+                                     exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+                permissions = ec2.get_snapshot_attribute(snapshot.id)
+            changed = True
 
     module.exit_json(changed=changed,
                      snapshot_id=snapshot.id,
                      volume_id=snapshot.volume_id,
                      volume_size=snapshot.volume_size,
-                     tags=snapshot.tags.copy())
+                     tags=snapshot.tags.copy(),
+                     permissions=permissions.attrs)
 
 
 def create_snapshot_ansible_module():
@@ -265,17 +353,26 @@ def create_snapshot_ansible_module():
             last_snapshot_min_age = dict(type='int', default=0),
             snapshot_tags = dict(type='dict', default=dict()),
             state = dict(choices=['absent','present'], default='present'),
+            create_volume_permissions=dict(type='dict', default=dict()),
         )
     )
-    module = AnsibleModule(argument_spec=argument_spec)
+    module = AnsibleModule(argument_spec=argument_spec,
+                           supports_check_mode=True,
+                           required_together=[['instance_id', 'device_name']],
+                           required_if=[['state', 'absent', ['snapshot_id']]],
+                           mutually_exclusive=[['volume_id', 'instance_id'],
+                                               ['volume_id', 'snapshot_id'],
+                                               ['instance_id', 'snapshot_id'],
+                                               ['snapshot_id', 'last_snapshot_min_age']],
+                          )
     return module
 
 
 def main():
     module = create_snapshot_ansible_module()
 
-    if not HAS_BOTO:
-        module.fail_json(msg='boto required for this module')
+    if not HAS_BOTO3:
+        module.fail_json(msg='boto3 and botocore are required for this module')
 
     volume_id = module.params.get('volume_id')
     snapshot_id = module.params.get('snapshot_id')
@@ -287,8 +384,19 @@ def main():
     last_snapshot_min_age = module.params.get('last_snapshot_min_age')
     snapshot_tags = module.params.get('snapshot_tags')
     state = module.params.get('state')
+    create_volume_permissions = module.params.get('create_volume_permissions')
 
-    ec2 = ec2_connect(module)
+    region, ec2_url, aws_connect_params = get_aws_connection_info(module, boto3=True)
+    try:
+        ec2 = boto3_conn(module, conn_type='client', resource='ec2',
+                         region=region, endpoint=ec2_url, **aws_connect_params)
+    except (botocore.exceptions.NoCredentialsError, botocore.exceptions.ProfileNotFound) as e:
+        module.fail_json(msg="Can't authorize connection. Check your credentials and profile.",
+                         exceptions=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+
+    if state == 'absent':
+        remove_snapshot(module=module, snapshot_id=snapshot_id, wait=wait,
+                        wait_timeout=wait_timeout, ec2=ec2)
 
     create_snapshot(
         module=module,
@@ -302,12 +410,10 @@ def main():
         snapshot_id=snapshot_id,
         device_name=device_name,
         snapshot_tags=snapshot_tags,
-        last_snapshot_min_age=last_snapshot_min_age
+        last_snapshot_min_age=last_snapshot_min_age,
+        create_volume_permissions=create_volume_permissions
     )
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.ec2 import *
 
 if __name__ == '__main__':
     main()
