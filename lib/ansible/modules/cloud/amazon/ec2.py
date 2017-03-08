@@ -36,7 +36,11 @@ options:
   id:
     version_added: "1.1"
     description:
-      - identifier for this instance or set of instances, so that the module will be idempotent with respect to EC2 instances. This identifier is valid for at least 24 hours after the termination of the instance, and should not be reused for another call later on. For details, see the description of client token at U(http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Run_Instance_Idempotency.html).
+      - identifier for this instance or set of instances, so that the module will be idempotent
+        with respect to EC2 instances. This identifier is valid for at least 24 hours after the
+        termination of the instance, and should not be reused for another call later on. For
+        details, see the description of client token at
+        U(http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Run_Instance_Idempotency.html).
     required: false
     default: null
     aliases: []
@@ -56,7 +60,9 @@ options:
   region:
     version_added: "1.2"
     description:
-      - The AWS region to use.  Must be specified if ec2_url is not used. If not specified then the value of the EC2_REGION environment variable, if any, is used. See U(http://docs.aws.amazon.com/general/latest/gr/rande.html#ec2_region)
+      - The AWS region to use.  Must be specified if ec2_url is not used. If not specified then the
+        value of the EC2_REGION environment variable, if any, is used. See
+        U(http://docs.aws.amazon.com/general/latest/gr/rande.html#ec2_region)
     required: false
     default: null
     aliases: [ 'aws_region', 'ec2_region' ]
@@ -76,7 +82,9 @@ options:
   tenancy:
     version_added: "1.9"
     description:
-      - An instance with a tenancy of "dedicated" runs on single-tenant hardware and can only be launched into a VPC. Note that to use dedicated tenancy you MUST specify a vpc_subnet_id as well. Dedicated tenancy is not available for EC2 "micro" instances.
+      - An instance with a tenancy of "dedicated" runs on single-tenant hardware and can only be launched into a VPC.
+        Note that to use dedicated tenancy you MUST specify a vpc_subnet_id as well. Dedicated tenancy is not
+        available for EC2 "micro" instances.
     required: false
     default: default
     choices: [ "default", "dedicated" ]
@@ -84,7 +92,8 @@ options:
   spot_price:
     version_added: "1.5"
     description:
-      - Maximum spot price to bid, If not set a regular on-demand instance is requested. A spot request is made with this maximum bid. When it is filled, the instance is started.
+      - Maximum spot price to bid, If not set a regular on-demand instance is requested. A spot request is made
+        with this maximum bid. When it is filled, the instance is started.
     required: false
     default: null
     aliases: []
@@ -156,7 +165,8 @@ options:
   instance_tags:
     version_added: "1.0"
     description:
-      - a hash/dictionary of tags to add to the new instance or for starting/stopping instance by tag; '{"key":"value"}' and '{"key":"value","key":"value"}'
+      - a hash/dictionary of tags to add to the new instance or for starting/stopping instance by
+        tag; '{"key":"value"}' and '{"key":"value","key":"value"}'
     required: false
     default: null
     aliases: []
@@ -236,7 +246,10 @@ options:
   volumes:
     version_added: "1.5"
     description:
-      - a list of hash/dictionaries of volumes to add to the new instance; '[{"key":"value", "key":"value"}]'; keys allowed are - device_name (str; required), delete_on_termination (bool; False), device_type (deprecated), ephemeral (str), encrypted (bool; False), snapshot (str), volume_type (str), iops (int) - device_type is deprecated use volume_type, iops must be set when volume_type='io1', ephemeral and snapshot are mutually exclusive.
+      - a list of hash/dictionaries of volumes to add to the new instance; '[{"key":"value", "key":"value"}]';
+        keys allowed are - device_name (str; required), delete_on_termination (bool; False), device_type (deprecated),
+        ephemeral (str), encrypted (bool; False), snapshot (str), volume_type (str), iops (int) - device_type
+        is deprecated use volume_type, iops must be set when volume_type='io1', ephemeral and snapshot are mutually exclusive.
     required: false
     default: null
     aliases: []
@@ -249,21 +262,27 @@ options:
   exact_count:
     version_added: "1.5"
     description:
-      - An integer value which indicates how many instances that match the 'count_tag' parameter should be running. Instances are either created or terminated based on this value.
+      - An integer value which indicates how many instances that match the 'count_tag' parameter should be
+        running. Instances are either created or terminated based on this value.
     required: false
     default: null
     aliases: []
   count_tag:
     version_added: "1.5"
     description:
-      - Used with 'exact_count' to determine how many nodes based on a specific tag criteria should be running.  This can be expressed in multiple ways and is shown in the EXAMPLES section.  For instance, one can request 25 servers that are tagged with "class=webserver". The specified tag must already exist or be passed in as the 'instance_tags' option.
+      - Used with 'exact_count' to determine how many nodes based on a specific tag criteria should be running.
+        This can be expressed in multiple ways and is shown in the EXAMPLES section.  For instance, one can
+        request 25 servers that are tagged with "class=webserver". The specified tag must already exist or be
+        passed in as the 'instance_tags' option.
     required: false
     default: null
     aliases: []
   network_interfaces:
     version_added: "2.0"
     description:
-      - A list of existing network interfaces to attach to the instance at launch. When specifying existing network interfaces, none of the assign_public_ip, private_ip, vpc_subnet_id, group, or group_id parameters may be used. (Those parameters are for creating a new network interface at launch.)
+      - A list of existing network interfaces to attach to the instance at launch. When specifying existing
+        network interfaces, none of the assign_public_ip, private_ip, vpc_subnet_id, group, or group_id
+        parameters may be used. (Those parameters are for creating a new network interface at launch.)
     required: false
     default: null
     aliases: ['network_interface']
@@ -599,15 +618,11 @@ EXAMPLES = '''
 import time
 from ast import literal_eval
 from ansible.module_utils.six import iteritems
-from ansible.module_utils.six import get_function_code
-
-from distutils.version import LooseVersion
 
 try:
     import boto.ec2
     from boto.ec2.blockdevicemapping import BlockDeviceType, BlockDeviceMapping
     from boto.exception import EC2ResponseError
-    from boto.vpc import VPCConnection
     HAS_BOTO = True
 except ImportError:
     HAS_BOTO = False
