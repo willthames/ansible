@@ -177,11 +177,12 @@ options:
   assign_public_ip:
     version_added: "1.5"
     description:
-      - when provisioning within vpc, assign a public IP address. Boto library must be 2.13.0+
+      - when provisioning within vpc, assign a public IP address. Default behaviour is
+        to assign public IPs in a public subnet, and not assign public IPs in a private
+        subnet.
     required: false
     default: null
     choices: [ "yes", "no" ]
-    aliases: []
   private_ip:
     version_added: "1.2"
     description:
@@ -377,8 +378,7 @@ EXAMPLES = '''
     assign_public_ip: yes
 
 # Dedicated tenancy example
-- local_action:
-    module: ec2
+- ec2:
     assign_public_ip: yes
     group_id: sg-1dc53f72
     key_name: mykey
@@ -520,8 +520,7 @@ EXAMPLES = '''
 #
 # Start stopped instances specified by tag
 #
-- local_action:
-    module: ec2
+- ec2:
     instance_tags:
         Name: ExtraPower
     state: running
@@ -529,8 +528,7 @@ EXAMPLES = '''
 #
 # Restart instances specified by tag
 #
-- local_action:
-    module: ec2
+- ec2:
     instance_tags:
         Name: ExtraPower
     state: restarted
@@ -740,44 +738,6 @@ def get_instance_info(inst):
 
     return instance_info
 
-def boto_supports_associate_public_ip_address(ec2):
-    """
-    Check if Boto library has associate_public_ip_address in the NetworkInterfaceSpecification
-    class. Added in Boto 2.13.0
-
-    ec2: authenticated ec2 connection object
-
-    Returns:
-        True if Boto library accepts associate_public_ip_address argument, else false
-    """
-
-    try:
-        network_interface = boto.ec2.networkinterface.NetworkInterfaceSpecification()
-        getattr(network_interface, "associate_public_ip_address")
-        return True
-    except AttributeError:
-        return False
-
-def boto_supports_profile_name_arg(ec2):
-    """
-    Check if Boto library has instance_profile_name argument. instance_profile_name has been added in Boto 2.5.0
-
-    ec2: authenticated ec2 connection object
-
-    Returns:
-        True if Boto library accept instance_profile_name argument, else false
-    """
-    run_instances_method = getattr(ec2, 'run_instances')
-    return 'instance_profile_name' in get_function_code(run_instances_method).co_varnames
-
-def boto_supports_volume_encryption():
-    """
-    Check if Boto library supports encryption of EBS volumes (added in 2.29.0)
-
-    Returns:
-        True if boto library has the named param as an argument on the request_spot_instances method, else False
-    """
-    return hasattr(boto, 'Version') and LooseVersion(boto.Version) >= LooseVersion('2.29.0')
 
 def create_block_device(module, ec2, volume):
     # Not aware of a way to determine this programatically
@@ -809,33 +769,14 @@ def create_block_device(module, ec2, volume):
     if 'ephemeral' in volume:
         if 'snapshot' in volume:
             module.fail_json(msg = 'Cannot set both ephemeral and snapshot')
-    if boto_supports_volume_encryption():
-        return BlockDeviceType(snapshot_id=volume.get('snapshot'),
-                               ephemeral_name=volume.get('ephemeral'),
-                               size=volume.get('volume_size'),
-                               volume_type=volume_type,
-                               delete_on_termination=volume.get('delete_on_termination', False),
-                               iops=volume.get('iops'),
-                               encrypted=volume.get('encrypted', None))
-    else:
-        return BlockDeviceType(snapshot_id=volume.get('snapshot'),
-                               ephemeral_name=volume.get('ephemeral'),
-                               size=volume.get('volume_size'),
-                               volume_type=volume_type,
-                               delete_on_termination=volume.get('delete_on_termination', False),
-                               iops=volume.get('iops'))
+    return BlockDeviceType(snapshot_id=volume.get('snapshot'),
+                           ephemeral_name=volume.get('ephemeral'),
+                           size=volume.get('volume_size'),
+                           volume_type=volume_type,
+                           delete_on_termination=volume.get('delete_on_termination', False),
+                           iops=volume.get('iops'),
+                           encrypted=volume.get('encrypted', None))
 
-def boto_supports_param_in_spot_request(ec2, param):
-    """
-    Check if Boto library has a <param> in its request_spot_instances() method. For example, the placement_group parameter wasn't added until 2.3.0.
-
-    ec2: authenticated ec2 connection object
-
-    Returns:
-        True if boto library has the named param as an argument on the request_spot_instances method, else False
-    """
-    method = getattr(ec2, 'request_spot_instances')
-    return param in get_function_code(method).co_varnames
 
 def await_spot_requests(module, ec2, spot_requests, count):
     """
@@ -1071,18 +1012,10 @@ def create_instances(module, ec2, vpc, override_count=None):
             if not spot_price:
                 params['tenancy'] = tenancy
 
-            if boto_supports_profile_name_arg(ec2):
-                params['instance_profile_name'] = instance_profile_name
-            else:
-                if instance_profile_name is not None:
-                    module.fail_json(
-                        msg="instance_profile_name parameter requires Boto version 2.5.0 or higher")
+            params['instance_profile_name'] = instance_profile_name
 
-            if assign_public_ip:
-                if not boto_supports_associate_public_ip_address(ec2):
-                    module.fail_json(
-                        msg="assign_public_ip parameter requires Boto version 2.13.0 or higher.")
-                elif not vpc_subnet_id:
+            if assign_public_ip is not None:
+                if not vpc_subnet_id:
                     module.fail_json(
                         msg="assign_public_ip only available with vpc_subnet_id")
 
@@ -1181,11 +1114,7 @@ def create_instances(module, ec2, vpc, override_count=None):
                 if private_ip:
                     module.fail_json(
                         msg='private_ip only available with on-demand (non-spot) instances')
-                if boto_supports_param_in_spot_request(ec2, 'placement_group'):
-                    params['placement_group'] = placement_group
-                elif placement_group :
-                    module.fail_json(
-                        msg="placement_group parameter requires Boto version 2.3.0 or higher.")
+                params['placement_group'] = placement_group
 
                 # You can't tell spot instances to 'stop'; they will always be
                 # 'terminate'd. For convenience, we'll ignore the latter value.
@@ -1558,7 +1487,7 @@ def main():
         user_data = dict(),
         instance_tags = dict(type='dict'),
         vpc_subnet_id = dict(),
-        assign_public_ip = dict(type='bool', default=False),
+        assign_public_ip = dict(type='bool'),
         private_ip = dict(),
         instance_profile_name = dict(),
         instance_ids = dict(type='list', aliases=['instance_id']),
