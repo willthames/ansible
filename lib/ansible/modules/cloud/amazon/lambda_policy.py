@@ -14,19 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-import json
-
-try:
-    import boto3
-    from botocore.exceptions import ClientError, ParamValidationError, MissingParametersError
-    HAS_BOTO3 = True
-except ImportError:
-    HAS_BOTO3 = False
-
 
 ANSIBLE_METADATA = {'status': ['preview'],
                     'supported_by': 'community',
-                    'version': '0.1'}
+                    'metadata_version': '0.1'}
 
 DOCUMENTATION = '''
 ---
@@ -39,7 +30,7 @@ description:
       such as Kinesis streams, M(lambda_invoke) to execute a lambda function and M(lambda_facts) to gather facts
       relating to one or more lambda functions.
 
-version_added: "2.3"
+version_added: "2.4"
 
 author: Pierre Jodouin (@pjodouin)
 options:
@@ -156,6 +147,20 @@ lambda_policy_action:
     type: string
 '''
 
+
+import json
+import re
+import traceback
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.ec2 import ec2_argument_spec, get_aws_connection_info, HAS_BOTO3
+from ansible.module_utils.ec2 import boto3_conn, camel_dict_to_snake_dict
+
+try:
+    from botocore.exceptions import ClientError, ParamValidationError, MissingParametersError
+except ImportError:
+    pass  # caught by imported HAS_BOTO3
+
 # ---------------------------------------------------------------------------------------------------
 #
 #   Helper Functions & classes
@@ -191,8 +196,12 @@ class AWSConnection:
             if not self.region:
                 self.region = self.resource_client['lambda'].meta.region_name
 
-        except (ClientError, ParamValidationError, MissingParametersError) as e:
-            ansible_obj.fail_json(msg="Unable to connect, authorize or access resource: {0}".format(e))
+        except ClientError as e:
+            ansible_obj.fail_json(msg="Unable to access resource {0}: {1}".format(resource, e),
+                                  exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+        except (ParamValidationError, MissingParametersError) as e:
+            ansible_obj.fail_json(msg="Unable to access resource {0}: {1}".format(resource, e),
+                                  exception=traceback.format_exc())
 
         # set account ID
         try:
@@ -317,9 +326,13 @@ def get_policy_statement(module, aws):
         policy_results = client.get_policy(**api_params)
         policy = json.loads(policy_results.get('Policy', '{}'))
 
-    except (ClientError, ParamValidationError, MissingParametersError) as e:
+    except ClientError as e:
         if not e.response['Error']['Code'] == 'ResourceNotFoundException':
-            module.fail_json(msg='Error retrieving function policy: {0}'.format(e))
+            module.fail_json(msg='Error retrieving function policy: {0}'.format(e),
+                             exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+    except (ParamValidationError, MissingParametersError) as e:
+        module.fail_json(msg='Error retrieving function policy: {0}'.format(e),
+                         exception=traceback.format_exc())
 
     if 'Statement' in policy:
         # Now that we have the policy, check if required permission statement is present and flatten to
@@ -368,9 +381,12 @@ def add_policy_permission(module, aws):
         if not module.check_mode:
             client.add_permission(**api_params)
         changed = True
-    except (ClientError, ParamValidationError, MissingParametersError) as e:
-        module.fail_json(msg='Error adding permission to policy: {0}'.format(e))
-
+    except ClientError as e:
+        module.fail_json(msg='Error adding permission to policy: {0}'.format(e),
+                         exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+    except (ParamValidationError, MissingParametersError) as e:
+        module.fail_json(msg='Error adding permission to policy: {0}'.format(e),
+                         exception=traceback.format_exc())
     return changed
 
 
@@ -396,8 +412,12 @@ def remove_policy_permission(module, aws):
         if not module.check_mode:
             client.remove_permission(**api_params)
         changed = True
-    except (ClientError, ParamValidationError, MissingParametersError) as e:
-        module.fail_json(msg='Error removing permission from policy: {0}'.format(e))
+    except ClientError as e:
+        module.fail_json(msg='Error removing permission from policy: {0}'.format(e),
+                         exception=traceback.format_exc(), **camel_dict_to_snake_dict(e.response))
+    except (ParamValidationError, MissingParametersError) as e:
+        module.fail_json(msg='Error removing permission from policy: {0}'.format(e),
+                         exception=traceback.format_exc())
 
     return changed
 
@@ -485,10 +505,6 @@ def main():
 
     module.exit_json(**results)
 
-
-# ansible import module(s) kept at ~eof as recommended
-from ansible.module_utils.basic import *
-from ansible.module_utils.ec2 import *
 
 if __name__ == '__main__':
     main()
