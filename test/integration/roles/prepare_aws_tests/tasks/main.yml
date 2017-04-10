@@ -1,0 +1,31 @@
+# Ansible cannot currently delete environment variables so if we want
+# them to be empty (as opposed to defined but with an empty string) we
+# have to ensure that they weren't present when we were actually
+# called.
+
+- name: Verify that environment is empty of variables that might interfere.
+  assert:
+    that:
+      - ansible_env.AWS_ACCESS_KEY_ID is not defined
+      - ansible_env.AWS_SECRET_ACCESS_KEY is not defined
+      - ansible_env.AWS_SESSION_TOKEN is not defined
+      - ansible_env.AWS_DEFAULT_REGION is not defined
+      - ansible_env.EC2_ACCESS_KEY is not defined
+      - ansible_env.EC2_SECRET_KEY is not defined
+      - ansible_env.EC2_REGION is not defined 
+      - ansible_env.EC2_URL is not defined
+      - ansible_env.AWS_PROFILE
+    msg: AWS environment variables defined which might interfere with test.  Please unset and run again.
+  tags: always
+
+# by default `integration_test_required_aws_profile` is set to
+# `ansible-integration-testing`.  If you really want to run with a
+# different profile simply override the variable to match your role's
+# name.
+
+- name: Verify that environment is empty of variables that might interfere.
+  assert:
+    that:
+      - ansible_env.AWS_PROFILE == integration_test_required_aws_profile
+    msg: Please set AWS_PROFILE to "ansible-integration-testing".  For safety we abort otherwise
+      
