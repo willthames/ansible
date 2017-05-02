@@ -131,19 +131,16 @@ EXAMPLES = '''
 '''
 
 import re
+import traceback
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.ec2 import AnsibleAWSError, connect_to_aws, ec2_argument_spec, get_aws_connection_info
+from ansible.module_utils.ec2 import AnsibleAWSError, ec2_argument_spec, get_aws_connection_info
+from ansible.module_utils.ec2 import camel_dict_to_snake_dict, HAS_BOTO3
 
 try:
-    import boto.ec2
-    import boto.vpc
-    from boto.exception import EC2ResponseError
-    HAS_BOTO = True
-except ImportError:
-    HAS_BOTO = False
-    if __name__ != '__main__':
-        raise
+    import botocore.exceptions.ClientError
+except:
+    pass  # caught by imported HAS_BOTO3
 
 
 class AnsibleRouteTableException(Exception):
@@ -233,8 +230,9 @@ def find_igw(vpc_conn, vpc_id):
     Note that this function is duplicated in other ec2 modules, and should
     potentially be moved into potentially be moved into a shared module_utils
     """
-    igw = vpc_conn.get_all_internet_gateways(
-        filters={'attachment.vpc-id': vpc_id})
+
+    filters = dict(Name='attachment.vpc-id', Values=[vpc_id])
+    igw = vpc_conn.describe_internet_gateways(Filters=filters)
 
     if not igw:
         raise AnsibleIgwSearchException('No IGW found for VPC {0}'.
@@ -244,16 +242,6 @@ def find_igw(vpc_conn, vpc_id):
     else:
         raise AnsibleIgwSearchException('Multiple IGWs found for VPC {0}'.
                                         format(vpc_id))
-
-
-def get_resource_tags(vpc_conn, resource_id):
-    return dict((t.name, t.value) for t in
-                vpc_conn.get_all_tags(filters={'resource-id': resource_id}))
-
-
-def tags_match(match_tags, candidate_tags):
-    return all((k in candidate_tags and candidate_tags[k] == v
-                for k, v in match_tags.items()))
 
 
 def ensure_tags(vpc_conn, resource_id, tags, add_only, check_mode):
@@ -280,7 +268,8 @@ def ensure_tags(vpc_conn, resource_id, tags, add_only, check_mode):
 def get_route_table_by_id(vpc_conn, vpc_id, route_table_id):
 
     route_table = None
-    route_tables = vpc_conn.get_all_route_tables(route_table_ids=[route_table_id], filters={'vpc_id': vpc_id})
+    route_tables = vpc_conn.describe_route_tables(RouteTableIds=[route_table_id],
+                                                  Filters=[dict(Name='vpc_id', Values=[vpc_id])])
     if route_tables:
         route_table = route_tables[0]
 
@@ -291,17 +280,15 @@ def get_route_table_by_tags(vpc_conn, vpc_id, tags):
 
     count = 0
     route_table = None
-    route_tables = vpc_conn.get_all_route_tables(filters={'vpc_id': vpc_id})
-    for table in route_tables:
-        this_tags = get_resource_tags(vpc_conn, table.id)
-        if tags_match(tags, this_tags):
-            route_table = table
-            count += 1
+    filters = [dict(Name='vpc_id', Values=[vpc_id])]
+    for (k, v) in tags.items():
+        filters.append(dict(Name='tag:%s' % k, Values=[v]))
+    route_tables = vpc_conn.get_all_route_tables(Filters=filters)
 
-    if count > 1:
+    if len(route_tables) != 1:
         raise RuntimeError("Tags provided do not identify a unique route table")
     else:
-        return route_table
+        return route_tables[0]
 
 
 def route_spec_matches_route(route_spec, route):
@@ -394,7 +381,7 @@ def ensure_routes(vpc_conn, route_table, route_specs, propagating_vgw_ids,
 
 def ensure_subnet_association(vpc_conn, vpc_id, route_table_id, subnet_id,
                               check_mode):
-    route_tables = vpc_conn.get_all_route_tables(
+    route_tables = vpc_conn.describe_route_tables(
         filters={'association.subnet_id': subnet_id, 'vpc_id': vpc_id}
     )
     for route_table in route_tables:
@@ -452,9 +439,9 @@ def ensure_propagation(vpc_conn, route_table, propagating_vgw_ids,
                 return {'changed': False}
 
         changed = True
-        vpc_conn.enable_vgw_route_propagation(route_table.id,
-                                              vgw_id,
-                                              dry_run=check_mode)
+        if not check_mode:
+            vpc_conn.enable_vgw_route_propagation(route_table.id,
+                                                 vgw_id)
 
     return {'changed': changed}
 
@@ -622,40 +609,35 @@ def main():
     argument_spec = ec2_argument_spec()
     argument_spec.update(
         dict(
-            lookup=dict(default='tag', required=False, choices=['tag', 'id']),
+            lookup=dict(default='tag', choices=['tag', 'id']),
             propagating_vgw_ids=dict(default=None, required=False, type='list'),
             purge_routes=dict(default=True, type='bool'),
             purge_subnets=dict(default=True, type='bool'),
-            route_table_id=dict(default=None, required=False),
-            routes=dict(default=[], required=False, type='list'),
+            route_table_id=dict(),
+            routes=dict(default=[], type='list'),
             state=dict(default='present', choices=['present', 'absent']),
-            subnets=dict(default=None, required=False, type='list'),
-            tags=dict(default=None, required=False, type='dict', aliases=['resource_tags']),
-            vpc_id=dict(default=None, required=True)
+            subnets=dict(type='list'),
+            tags=dict(type='dict', aliases=['resource_tags']),
+            vpc_id=dict(required=True)
         )
     )
 
-    module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
+    module = AnsibleModule(argument_spec=argument_spec,
+                           supports_check_mode=True,
+                           required_if=[['lookup', 'id', ['route_table_id']]])
 
-    if not HAS_BOTO:
-        module.fail_json(msg='boto is required for this module')
+    if not HAS_BOTO3:
+        module.fail_json(msg='boto3 and botocore are required for this module')
 
-    region, ec2_url, aws_connect_params = get_aws_connection_info(module)
+    region, ec2_url, aws_connect_params = get_aws_connection_info(module, boto3=True)
 
     if region:
-        try:
-            connection = connect_to_aws(boto.vpc, region, **aws_connect_params)
-        except (boto.exception.NoAuthHandlerFound, AnsibleAWSError) as e:
-            module.fail_json(msg=str(e))
+        connection = boto3_conn(module, conn_type='client', resource='ec2',
+                                region=region, endpoint=ec2_url, **aws_connect_kwargs)
     else:
         module.fail_json(msg="region must be specified")
 
-    lookup = module.params.get('lookup')
-    route_table_id = module.params.get('route_table_id')
-    state = module.params.get('state', 'present')
-
-    if lookup == 'id' and route_table_id is None:
-        module.fail_json(msg="You must specify route_table_id if lookup is set to id")
+    state = module.params['state']
 
     try:
         if state == 'present':
