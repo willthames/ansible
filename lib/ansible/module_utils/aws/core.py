@@ -141,3 +141,6 @@ class AnsibleAWSModule(object):
         else:
             self._module.fail_json(msg=message, exception=last_traceback,
                                    **camel_dict_to_snake_dict(response))
+
+    def log(self, *args, **kwargs):
+        return self._module.log(*args, **kwargs)
