@@ -19,10 +19,12 @@
             "Sid": "AllowRDSInstanceManageOwnInstance",
             "Effect": "Allow",
             "Action": [
+                "rds:AddTagsToResource",
                 "rds:CreateDBInstance",
                 "rds:ModifyDBInstance",
                 "rds:ListTagsForResource",
-                "rds:DescribeDBInstances"
+                "rds:DescribeDBInstances",
+                "rds:RemoveTagsFromResource"
             ],
             "Resource": [
                 "arn:aws:rds:{{aws_region}}:{{aws_account}}:db:ansible-test-*"

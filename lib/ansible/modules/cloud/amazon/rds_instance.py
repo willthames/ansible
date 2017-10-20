@@ -334,7 +334,7 @@ import sys
 import time
 import traceback
 from ansible.module_utils.aws.core import AnsibleAWSModule
-from ansible.module_utils.ec2 import get_aws_connection_info, boto3_conn
+from ansible.module_utils.ec2 import get_aws_connection_info, boto3_conn, snake_dict_to_camel_dict
 from ansible.module_utils.ec2 import camel_dict_to_snake_dict, AWSRetry
 from ansible.module_utils.ec2 import ansible_dict_to_boto3_tag_list, boto3_tag_list_to_ansible_dict, compare_aws_tags
 from ansible.module_utils.aws.rds import get_db_instance, instance_to_facts, instance_facts_diff
@@ -620,13 +620,12 @@ def abort_on_impossible_changes(module, before_facts):
                                  (immutable_key, before_facts['db_instance_identifier']))
 
 
-def camel(words):
-    def capitalize_with_abbrevs(word):
-        if word in ["db", "aws", "az", "kms"]:
-            return word.upper()
-        return word.capitalize()
-
-    return ''.join(capitalize_with_abbrevs(x) or '_' for x in words.split('_'))
+def fix_abbrevs_case(parameter):
+    result = parameter
+    for word in ["Db", "Aws", "Az", "Kms"]:
+        if word in parameter:
+            result = result.replace(word, word.upper())
+    return result
 
 
 def prepare_params_for_modify(module, connection, before_facts):
@@ -669,6 +668,7 @@ def prepare_changes_for_modify(module, connection, before_facts):
     # convert from fact format to the AWS call CamelCase format.
 
     params = snake_dict_to_camel_dict(facts_to_change, capitalize_first=True)
+    params = dict((fix_abbrevs_case(key), value) for (key, value) in params.items())
 
     if facts_to_change.get('db_security_groups'):
         params['DBSecurityGroups'] = facts_to_change.get('db_security_groups').split(',')
@@ -683,7 +683,7 @@ def prepare_changes_for_modify(module, connection, before_facts):
     # You can specify 9.6 when creating a DB and get 9.6.2
     # We should ignore version if the requested version is
     # a prefix of the current version
-    if will_change['before'].get('engine_version').startwith(will_change['after'].get('engine_version')):
+    if will_change['before'].get('engine_version', '').startswith(will_change['after'].get('engine_version', '')):
         del(facts_to_change['engine_version'])
 
     # modify_db_instance does not cope with DBSubnetGroup not moving VPC!
