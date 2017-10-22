@@ -683,8 +683,9 @@ def prepare_changes_for_modify(module, connection, before_facts):
     # You can specify 9.6 when creating a DB and get 9.6.2
     # We should ignore version if the requested version is
     # a prefix of the current version
-    if will_change['before'].get('engine_version', '').startswith(will_change['after'].get('engine_version', '')):
-        del(facts_to_change['engine_version'])
+    if 'engine_version' in facts_to_change:
+        if will_change['before'].get('engine_version', '').startswith(will_change['after'].get('engine_version', '')):
+            del(facts_to_change['engine_version'])
 
     # modify_db_instance does not cope with DBSubnetGroup not moving VPC!
     try:
