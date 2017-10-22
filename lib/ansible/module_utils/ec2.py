@@ -366,7 +366,7 @@ def _camel_to_snake(name, reversible=False):
     return re.sub(all_cap_pattern, r'\1_\2', s2).lower()
 
 
-def camel_dict_to_snake_dict(camel_dict, reversible=False, ignore_list=None):
+def camel_dict_to_snake_dict(camel_dict, reversible=False, ignore_list=()):
     """
     reversible allows two way conversion of a camelized dict
     such that snake_dict_to_camel_dict(camel_dict_to_snake_dict(x)) == x
@@ -394,8 +394,6 @@ def camel_dict_to_snake_dict(camel_dict, reversible=False, ignore_list=None):
         return checked_list
 
     snake_dict = {}
-    if ignore_list is None:
-        ignore_list = []
     for k, v in camel_dict.items():
         if isinstance(v, dict) and k not in ignore_list:
             snake_dict[_camel_to_snake(k, reversible=reversible)] = camel_dict_to_snake_dict(v, reversible)
