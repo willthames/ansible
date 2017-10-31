@@ -114,6 +114,28 @@
       set_fact:
         ec2_ami_image_id: "{{ result.image_id }}"
 
+    - name: recreate an image from the instance
+      ec2_ami:
+        ec2_region: '{{ec2_region}}'
+        ec2_access_key: '{{ec2_access_key}}'
+        ec2_secret_key: '{{ec2_secret_key}}'
+        security_token: '{{security_token}}'
+        instance_id: '{{ setup_instance.instance_ids[0] }}'
+        state: present
+        name: '{{ ec2_ami_name }}_ami'
+        description: '{{ ec2_ami_description }}'
+        tags:
+          Name: '{{ ec2_ami_name }}_ami'
+        wait: yes
+        root_device_name: /dev/xvda
+      register: recreate
+
+    - name: assert that nothing changed
+      assert:
+        that:
+          - "not recreate.changed"
+          - "recreate.image_id == result.image_id"
+
     # ============================================================
 
     - name: delete the image
@@ -169,6 +191,8 @@
         name: '{{ ec2_ami_name }}_ami'
         description: '{{ ec2_ami_description }}'
         state: present
+        launch_permissions:
+          user_ids: []
         tags:
           Name: '{{ ec2_ami_name }}_ami'
         root_device_name: /dev/xvda
@@ -397,7 +421,7 @@
 
     # ============================================================
 
-  always:
+- always:
 
     # ============================================================
 
