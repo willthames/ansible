@@ -17,13 +17,14 @@
             "Sid": "AllowAutoscaling",
             "Effect": "Allow",
             "Action": [
-                "autoscaling:CreateLaunchConfiguration",
                 "autoscaling:CreateAutoScalingGroup",
-                "autoscaling:UpdateAutoScalingGroup",
+                "autoscaling:CreateLaunchConfiguration",
                 "autoscaling:DeleteAutoScalingGroup",
                 "autoscaling:DeleteLaunchConfiguration",
+                "autoscaling:DeletePolicy",
                 "autoscaling:PutScalingPolicy",
-                "autoscaling:DeletePolicy"
+                "autoscaling:TerminateInstanceInAutoScalingGroup",
+                "autoscaling:UpdateAutoScalingGroup"
             ],
             "Resource": [
                 "arn:aws:autoscaling:{{aws_region}}:{{aws_account}}:*"
