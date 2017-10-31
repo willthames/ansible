@@ -402,15 +402,6 @@ def create_image(module, connection):
             'Description': description
         }
 
-        images = connection.describe_images(
-            Filters=[
-                {
-                    'Name': 'name',
-                    'Values': [name]
-                }
-            ]
-        ).get('Images')
-
         block_device_mapping = None
 
         if device_mapping:
@@ -478,7 +469,8 @@ def create_image(module, connection):
                 params['LaunchPermission']['Add'].append(dict(Group=group_name))
             for user_id in launch_permissions.get('user_ids', []):
                 params['LaunchPermission']['Add'].append(dict(UserId=str(user_id)))
-            connection.modify_image_attribute(**params)
+            if params['LaunchPermission']['Add']:
+                connection.modify_image_attribute(**params)
         except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
             module.fail_json_aws(e, msg="Error setting launch permissions for image %s" % image_id)
 
@@ -686,6 +678,15 @@ def main():
     elif module.params.get('state') == 'present':
         if module.params.get('image_id'):
             update_image(module, connection, module.params.get('image_id'))
+        try:
+            filters = [{'Name': 'name', 'Values': [module.params.get('name')]},
+                       {'Name': 'state', 'Values': ['available']}]
+            images = connection.describe_images(Filters=filters, Owners=['self']).get('Images')
+        except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError) as e:
+            module.fail_json_aws(e, msg="Error looking up images by name")
+        if len(images) == 1:
+            update_image(module, connection, images[0]['ImageId'])
+
         if not module.params.get('instance_id') and not module.params.get('device_mapping'):
             module.fail_json(msg="The parameters instance_id or device_mapping (register from EBS snapshot) are required for a new image.")
         create_image(module, connection)
