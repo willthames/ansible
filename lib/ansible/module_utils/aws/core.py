@@ -65,6 +65,7 @@ from functools import wraps
 from distutils.version import LooseVersion
 
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
+from ansible.module_utils.state import AnsibleStateModule
 from ansible.module_utils._text import to_native
 from ansible.module_utils.ec2 import HAS_BOTO3, camel_dict_to_snake_dict, ec2_argument_spec, boto3_conn, get_aws_connection_info
 
@@ -72,22 +73,13 @@ from ansible.module_utils.ec2 import HAS_BOTO3, camel_dict_to_snake_dict, ec2_ar
 __all__ = ('AnsibleAWSModule', 'HAS_BOTO3', 'is_boto3_error_code')
 
 
-class AnsibleAWSModule(object):
-    """An ansible module class for AWS modules
+class AnsibleAWSModule(AnsibleModule):
+    """An ansible module class for AWS modules"""
 
-    AnsibleAWSModule provides an a class for building modules which
-    connect to Amazon Web Services.  The interface is currently more
-    restricted than the basic module class with the aim that later the
-    basic module class can be reduced.  If you find that any key
-    feature is missing please contact the author/Ansible AWS team
-    (available on #ansible-aws on IRC) to request the additional
-    features needed.
-    """
     default_settings = {
         "default_args": True,
         "check_boto3": True,
         "auto_retry": True,
-        "module_class": AnsibleModule
     }
 
     def __init__(self, **kwargs):
@@ -110,40 +102,11 @@ class AnsibleAWSModule(object):
                 pass
             kwargs["argument_spec"] = argument_spec_full
 
-        self._module = AnsibleAWSModule.default_settings["module_class"](**kwargs)
+        super(AnsibleAWSModule, self).__init__(**kwargs)
 
         if local_settings["check_boto3"] and not HAS_BOTO3:
-            self._module.fail_json(
+            self.fail_json(
                 msg=missing_required_lib('botocore or boto3'))
-
-        self.check_mode = self._module.check_mode
-        self._diff = self._module._diff
-        self._name = self._module._name
-
-    @property
-    def params(self):
-        return self._module.params
-
-    def exit_json(self, *args, **kwargs):
-        return self._module.exit_json(*args, **kwargs)
-
-    def fail_json(self, *args, **kwargs):
-        return self._module.fail_json(*args, **kwargs)
-
-    def debug(self, *args, **kwargs):
-        return self._module.debug(*args, **kwargs)
-
-    def warn(self, *args, **kwargs):
-        return self._module.warn(*args, **kwargs)
-
-    def deprecate(self, *args, **kwargs):
-        return self._module.deprecate(*args, **kwargs)
-
-    def boolean(self, *args, **kwargs):
-        return self._module.boolean(*args, **kwargs)
-
-    def md5(self, *args, **kwargs):
-        return self._module.md5(*args, **kwargs)
 
     def client(self, service, retry_decorator=None):
         region, ec2_url, aws_connect_kwargs = get_aws_connection_info(self, boto3=True)
@@ -228,6 +191,12 @@ class AnsibleAWSModule(object):
         """
         existing = self._gather_versions()
         return LooseVersion(existing['botocore_version']) >= LooseVersion(desired)
+
+
+class AnsibleAWSStateModule(AnsibleAWSModule, AnsibleStateModule):
+
+    def __init__(self, **kwargs):
+        super(AnsibleAWSStateModule, self).__init__(**kwargs)
 
 
 class _RetryingBotoClientWrapper(object):

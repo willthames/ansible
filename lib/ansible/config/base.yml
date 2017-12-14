@@ -1685,6 +1685,22 @@ SHOW_CUSTOM_STATS:
   ini:
   - {key: show_custom_stats, section: defaults}
   type: bool
+STATE_FILE:
+  name: Location of file to use to maintain state
+  default:
+  description: When using the 'state' strategy, the location of the file that maintains state
+  env: [{name: ANSIBLE_STATE_FILE}]
+  ini:
+  - {key: state_file, section: state}
+  type: string
+STATE_LOCK:
+  name: Location of lock file used to prevent multiple writes to the state file
+  default:
+  description: When using the 'state' strategy, the location of the lock file used to protect state from simultaneous write access
+  env: [{name: ANSIBLE_STATE_FILE}]
+  ini:
+  - {key: state_lock, section: state}
+  type: string
 STRING_TYPE_FILTERS:
   name: Filters to preserve strings
   default: [string, to_json, to_nice_json, to_yaml, ppretty, json]
