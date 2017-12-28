@@ -749,7 +749,7 @@ class AnsibleModule(object):
     def __init__(self, argument_spec, bypass_checks=False, no_log=False,
                  check_invalid_arguments=None, mutually_exclusive=None, required_together=None,
                  required_one_of=None, add_file_common_args=False, supports_check_mode=False,
-                 required_if=None, required_by=None):
+                 required_if=None, required_by=None, supports_state=False, maintains_state=False):
 
         '''
         Common code for quickly building an ansible module in Python
@@ -762,6 +762,8 @@ class AnsibleModule(object):
         self._name = os.path.basename(__file__)  # initialize name until we can parse from options
         self.argument_spec = argument_spec
         self.supports_check_mode = supports_check_mode
+        self.supports_state = supports_state
+        self.maintains_state = maintains_state
         self.check_mode = False
         self.bypass_checks = bypass_checks
         self.no_log = no_log
@@ -822,13 +824,23 @@ class AnsibleModule(object):
         # a known valid (LANG=C) if it's an invalid/unavailable locale
         self._check_locale()
 
+        # Modules that properly maintain state should inherit from AnsibleStateModule. Some modules
+        # trivially support state (because they don't modify state) - examples being:
+        # setup, fail, assert, debug, pause
+        # Rather than modify the module to support the state argument_spec, remove any state arguments
+        if self.supports_state and not self.maintains_state:
+            self.params.pop('enforce_state', None)
+            self.params.pop('validate_state', None)
+            self.params.pop('depends_on', None)
+            self.params.pop('state', None)
+
+        self._set_defaults(pre=True)
+
         self._check_arguments(check_invalid_arguments)
 
         # check exclusive early
         if not bypass_checks:
             self._check_mutually_exclusive(mutually_exclusive)
-
-        self._set_defaults(pre=True)
 
         self._CHECK_ARGUMENT_TYPES_DISPATCHER = {
             'str': self._check_type_str,

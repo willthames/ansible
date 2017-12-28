@@ -1,0 +1,7 @@
+- name: Run state-test suite
+  hosts: localhost
+  strategy: state
+  connection: local
+
+  roles:
+  - state-test

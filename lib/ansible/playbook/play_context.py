@@ -130,6 +130,10 @@ class PlayContext(Base):
     _force_handlers = FieldAttribute(isa='bool', default=False)
     _start_at_task = FieldAttribute(isa='string')
     _step = FieldAttribute(isa='bool', default=False)
+    # state flags
+    _state = FieldAttribute(isa='string')
+    _validate_state = FieldAttribute(isa='bool')
+    _enforce_state = FieldAttribute(isa='bool')
 
     def __init__(self, play=None, passwords=None, connection_lockfd=None):
         # Note: play is really not optional.  The only time it could be omitted is when we create

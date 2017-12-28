@@ -21,19 +21,21 @@ from ansible.module_utils.basic import AnsibleModule
 class AnsibleStateModule(AnsibleModule):
 
     def __init__(self, argument_spec, **kwargs):
+        kwargs['supports_state'] = True
+        kwargs['maintains_state'] = True
         super(AnsibleStateModule, self).__init__(argument_spec, **kwargs)
-        self.supports_state = True
         self.argument_spec.extend(
             dict(resource_id=dict(),
                  depends_on=dict(type='list'),
                  _ansible_state=dict(type='dict'),
                  validate_state=dict(type='bool', default=False),
-                 enforce_state=dict(type='bool', default=False))
+                 enforce_state=dict(type='bool', default=False),
+                 state=dict(choices=['present', 'absent']),
+            )
         )
         self.diff_ignore = []
 
-    @staticmethod
-    def compare(before, after):
+    def compare(self, before, after):
         if before == after:
             return {}
         if not before:
@@ -41,9 +43,9 @@ class AnsibleStateModule(AnsibleModule):
         if not after:
             return {'before': before, 'after': None}
         before = dict((k, v) for (k, v) in set(before.items()).difference(self.diff_ignore)
-                    if before.get(k) != after.get(k))
+                      if before.get(k) != after.get(k))
         after = dict((k, v) for (k, v) in set(after.items()).difference(self.diff_ignore)
-                    if before.get(k) != after.get(k))
+                     if before.get(k) != after.get(k))
         return {'before': before, 'after': after}
 
     def run(self):
@@ -81,7 +83,7 @@ class AnsibleStateModule(AnsibleModule):
                     desired = self.create()
                 diff = self.compare(existing, desired)
                 return dict(changed=True, diff=diff, **desired)
-        if state == 'absent'
+        if state == 'absent':
             if not existing or existing['state'] == state:
                 return dict(changed=False)
             else:

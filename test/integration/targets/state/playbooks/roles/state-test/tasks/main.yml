@@ -1,0 +1,14 @@
+- name: ensure independent state_file is {{ state }}
+  state_file:
+    path: "{{ tempdir }}/state_file"
+    content: 123
+    resource_id: "my_state_file"
+  register: independent_state_file
+  ignore_errors: True
+
+- name: ensure dependent state_file is {{ state }}
+  state_file:
+    path: "{{ tempdir }}/state_file_2"
+    content: "{{ ansible_state.state_file.my_state_file.inode }}"
+  register: dependent_state_file
+  ignore_errors: True

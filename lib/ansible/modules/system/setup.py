@@ -146,6 +146,7 @@ def main():
             fact_path=dict(default='/etc/ansible/facts.d', required=False, type='path'),
         ),
         supports_check_mode=True,
+        supports_state=True,
     )
 
     gather_subset = module.params['gather_subset']

@@ -1,0 +1,13 @@
+- name: Check that validating corrupted state fails
+  hosts: localhost
+  strategy: state
+  connection: local
+
+  roles:
+    - state_test
+
+  tasks:
+    - name: assert that first state file task failed due to mismatched state
+      assert:
+        that:
+          - first_state_file.failed
