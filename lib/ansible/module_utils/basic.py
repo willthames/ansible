@@ -832,7 +832,9 @@ class AnsibleModule(object):
             self.params.pop('enforce_state', None)
             self.params.pop('validate_state', None)
             self.params.pop('depends_on', None)
+            self.params.pop('resource_id', None)
             self.params.pop('state', None)
+            self.params.pop('_state', None)
 
         self._set_defaults(pre=True)
 

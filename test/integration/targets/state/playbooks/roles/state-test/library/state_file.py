@@ -59,6 +59,7 @@ inode:
 
 from ansible.module_utils.state import AnsibleStateModule
 import os
+import stat
 
 
 class StateFileModule(AnsibleStateModule):
@@ -73,10 +74,11 @@ class StateFileModule(AnsibleStateModule):
         results['path'] = path
         if not os.path.exists(path):
             return {'state': 'absent'}
-        stat = os.stat(path)
-        results['inode'] = stat.ST_INO
+        path_stat = os.stat(path)
+        results['inode'] = path_stat[stat.ST_INO]
         with open(path) as f:
             results['content'] = f.read()
+        results['state'] = 'present'
         return results
 
     def create(self):
@@ -115,7 +117,7 @@ def main():
         argument_spec=argument_spec,
         supports_check_mode=True
     )
-    module.run()
+    module.exit_json(**module.run())
 
 
 if __name__ == '__main__':

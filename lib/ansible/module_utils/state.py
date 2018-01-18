@@ -23,16 +23,16 @@ class AnsibleStateModule(AnsibleModule):
     def __init__(self, argument_spec, **kwargs):
         kwargs['supports_state'] = True
         kwargs['maintains_state'] = True
-        super(AnsibleStateModule, self).__init__(argument_spec, **kwargs)
-        self.argument_spec.extend(
+        argument_spec.update(
             dict(resource_id=dict(),
                  depends_on=dict(type='list'),
-                 _ansible_state=dict(type='dict'),
+                 _state=dict(type='dict'),
                  validate_state=dict(type='bool', default=False),
                  enforce_state=dict(type='bool', default=False),
                  state=dict(choices=['present', 'absent']),
             )
         )
+        super(AnsibleStateModule, self).__init__(argument_spec, **kwargs)
         self.diff_ignore = []
 
     def compare(self, before, after):
@@ -51,7 +51,7 @@ class AnsibleStateModule(AnsibleModule):
     def run(self):
         # state strategy will pass in empty dict when no state exists,
         # default is None, so can distinguish between standard and state operation.
-        existing = self.params['_ansible_state']
+        existing = self.params['_state']
         if existing is None:
             existing = self.get()
         elif self.params['validate_state'] or self.params['enforce_state']:
@@ -69,26 +69,31 @@ class AnsibleStateModule(AnsibleModule):
 
         if state == 'present':
             desired = self.predict(existing)
+            changed = False
             if existing and existing['state'] == state:
                 diff = self.compare(existing, desired)
                 if diff:
                     if not self.check_mode:
                         desired = self.update()
                         diff = self.compare(existing, desired)
-                    return dict(changed=True, diff=diff, _ansible_state=desired, **desired)
-                else:
-                    return dict(changed=False, diff={}, _ansible_state=desired, **desired)
+                        changed = True
             else:
                 if not self.check_mode:
                     desired = self.create()
                 diff = self.compare(existing, desired)
-                return dict(changed=True, diff=diff, **desired)
+                changed = True
+            _state = desired
+            _state['state'] = 'present'
+            return dict(changed=changed, diff={}, _state=_state, **desired)
         if state == 'absent':
+            if existing and 'state' not in existing:
+                import epdb
+                epdb.st()
             if not existing or existing['state'] == state:
-                return dict(changed=False)
+                return dict(changed=False, _state={'state': 'absent'})
             else:
                 desired = {'state': 'absent'}
                 if not self.check_mode:
                     desired = self.delete()
-                diff = self.compare(existing, desired)
-                return dict(changed=True, diff=diff, _ansible_state=desired)
+                diff = self.compare(existing, {})
+                return dict(changed=True, diff=diff, _state=desired)

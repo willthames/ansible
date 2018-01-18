@@ -453,6 +453,7 @@ def main():
                                     aliases=['checksum', 'checksum_algo']),
         ),
         supports_check_mode=True,
+        supports_state=True,
     )
 
     path = module.params.get('path')

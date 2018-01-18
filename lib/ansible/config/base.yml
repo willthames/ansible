@@ -1692,7 +1692,7 @@ STATE_FILE:
   env: [{name: ANSIBLE_STATE_FILE}]
   ini:
   - {key: state_file, section: state}
-  type: string
+  type: path
 STATE_LOCK:
   name: Location of lock file used to prevent multiple writes to the state file
   default:

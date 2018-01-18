@@ -52,7 +52,7 @@ class PlaybookCLI(CLI):
                                help="one-step-at-a-time: confirm each task before running")
         self.parser.add_option('--start-at-task', dest='start_at_task',
                                help="start the playbook at the task matching this name")
-        self.parser.add_option('--state', dest='state',
+        self.parser.add_option('--state', dest='state', default='present',
                                help="Desired state for playbook run")
         self.parser.add_option('--validate_state', dest='validate_state', action='store_true', default=False,
                                help="Whether to check whether recorded state matches actual state before changes are made")

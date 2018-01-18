@@ -39,11 +39,12 @@ import yaml
 
 from ansible import constants as C
 from ansible.errors import AnsibleError, AnsibleUndefinedVariable
+from ansible.module_utils._text import to_text
+from ansible.parsing.yaml.dumper import AnsibleDumper
 from ansible.playbook.included_file import IncludedFile
 from ansible.plugins.loader import action_loader
 from ansible.plugins.strategy import StrategyBase
 from ansible.template import Templar
-from ansible.module_utils._text import to_text
 
 
 try:
@@ -53,47 +54,57 @@ except ImportError:
     display = Display()
 
 
-class StateNode(object):
-    def __init__(self, task, state, resource_id=None):
-        self.task = task
-        self.state = state
-        self.resource_id = resource_id
-        self.children = []
+class AbsentState():
+    def __init__(self):
+        self.data = dict()
+
+    def __getattr__(self, x):
+        return "*** ABSENT ***"
+
+    def __getitem__(self, x):
+        return self.data.get(x, AbsentState())
+
+    def __setitem__(self, k, v):
+        self.data[k] = v
+
+class ExecutionRecord():
+    ''' ExecutionRecord is to save enough data in results to allow tasks to
+        depend on non-state-based tasks '''
+
+    def __init__(self, result):
+        for key in result:
+            setattr(self, key, result[key])
 
 
 class StrategyModule(StrategyBase):
 
-    def resolve_candidates(self, unresolved, ansible_resources):
-        result = []
+    def resolve_candidates(self, unresolved):
         resolved = []
+        leftovers = []
         for (state, task, task_vars, host) in unresolved:
             try:
-                extra_vars = task_vars.copy()
-                extra_vars.update(dict(ansible_resources=ansible_resources))
-                templar = Templar(loader=self._loader, variables=extra_vars)
+                task_vars.update(dict(ansible_state=self.ansible_state))
+                templar = Templar(loader=self._loader, variables=task_vars)
+                # attempt templating all the task arguments
                 for (k, v) in task.args.items():
-                    task.args[k] = to_text(templar.template(v), nonstring='empty')
+                    to_text(templar.template(v), nonstring='empty')
                 display.debug("Adding %s %s to state" % (task.action, task.args.get('resource_id')))
 
                 # Run new task in check mode
-                self.run_task(host, task, check_mode=True)
-                results = self._process_pending_results(self.iterator)
-
-                if task.args.get('resource_id'):
-                    state_node = StateNode(state, task, task.args['resource_id'])
-                    ansible_resources[task.action][task.args['resource_id']] = state_node
-                else:
-                    state_node = StateNode(state, task)
-                resolved.append(state_node)
+                task_vars['_ansible_check_mode'] = True
+                result = self.run_task(host, task, task_vars, check_mode=True)
+                if result.get('failed') and not task.ignore_errors:
+                    raise AnsibleError("Cannot generate task order with tasks that fail in check mode")
+                resolved.append((state, task, task_vars, host))
             except AnsibleUndefinedVariable as e:
                 # hopefully we can resolve this in a later pass
-                pass
+                leftovers.append((state, task, task_vars, host))
             time.sleep(1)
-        return resolved, result
+        return resolved, leftovers
 
     def generate_task_ordering(self):
         hosts = self.get_hosts_left(self.iterator)
-        ansible_resources = defaultdict(dict)
+        self.ansible_state = dict()
         unresolved = list()
         resolved = list()
         for host in hosts:
@@ -109,21 +120,23 @@ class StrategyModule(StrategyBase):
                 display.debug("done getting variables")
                 templar = Templar(loader=self._loader, variables=task_vars)
                 task.name = to_text(templar.template(task.name, fail_on_undefined=False), nonstring='empty')
-                task.args['validate_state'] = task.args.get('validate_state', self.play_context.validate_state)
-                task.args['enforce_state'] = task.args.get('enforce_state', self.play_context.enforce_state)
-                task.args['state'] = task.args.get('enforce_state', self.play_context.enforce_state)
+                for arg in ['validate_state', 'enforce_state', 'state']:
+                    if task.args.get(arg) is None:
+                        task.args[arg] = getattr(self.play_context, arg)
+                _state = self.ansible_state.get(task.action, {}).get(task.args.get('resource_id'), {})
+                if _state:
+                    task.args['_state'] = _state
                 unresolved.append((state, task, task_vars, host))
 
         while unresolved:
-            newresolved, unresolved = self.resolve_candidates(unresolved, ansible_resources)
+            newresolved, unresolved = self.resolve_candidates(unresolved)
             if not newresolved:
-                display.warning("No new resolutions on most recent pass")
+                raise AnsibleError("No new resolutions on most recent pass")
             resolved.extend(newresolved)
         return resolved
 
-    def run_task(self, host, task, check_mode=False):
-        if check_mode:
-            task.check_mode = check_mode
+    def run_task(self, host, task, task_vars, check_mode=False):
+        task.check_mode = check_mode
         host_name = host.get_name()
         if host_name not in self._tqm._unreachable_hosts and task:
             # check to see if this host is blocked (still executing a previous task)
@@ -140,6 +153,11 @@ class StrategyModule(StrategyBase):
                 display.debug("getting variables")
                 task_vars = self._variable_manager.get_vars(play=self.iterator._play, host=host, task=task)
                 self.add_tqm_variables(task_vars, play=self.iterator._play)
+                task_vars['ansible_state'] = self.ansible_state
+                if task.args.get('state') is not None:
+                    task_vars['state'] = task.args['state']
+                else:
+                    task_vars['state'] = self.play_context.state
                 templar = Templar(loader=self._loader, variables=task_vars)
                 display.debug("done getting variables")
 
@@ -161,8 +179,9 @@ class StrategyModule(StrategyBase):
                                         "executed for every host in the inventory list.")
 
                 if task.action == 'meta':
-                    self._execute_meta(task, self.play_context, self.iterator, target_host=host)
+                    results = self._execute_meta(task, self.play_context, self.iterator, target_host=host)
                     self._blocked_hosts[host_name] = False
+                    return results[0]._result
                 else:
                     # handle step if needed, skip meta actions as they are used internally
                     if not self._step or self._take_step(task, host_name):
@@ -172,6 +191,25 @@ class StrategyModule(StrategyBase):
                         self._tqm.send_callback('v2_playbook_on_task_start', task, is_conditional=False)
                         self._queue_task(host, task, task_vars, self.play_context)
                         del task_vars
+                        results = self._wait_on_pending_results(self.iterator)
+                        result = results[0]._result
+
+                        if task.args.get('resource_id'):
+                            # FIXME: with_items ???
+                            if '_state' not in result:
+                                result['_state'] = ExecutionRecord(result)
+                            elif result['_state'] == {'state': 'absent'}:
+                                result['_state'] = AbsentState()
+                                result['_state']['state'] = 'absent'
+                            if task.action not in self.ansible_state:
+                                self.ansible_state[task.action] = dict()
+                            self.ansible_state[task.action][task.args['resource_id']] = result['_state']
+                        #self.update_active_connections(results)
+
+                        # pause briefly so we don't spin lock
+                        time.sleep(C.DEFAULT_INTERNAL_POLL_INTERVAL)
+                        return result
+
             else:
                 display.debug("%s is blocked, skipping for now" % host_name)
 
@@ -190,11 +228,20 @@ class StrategyModule(StrategyBase):
 
     def save_ansible_state(self):
         state_file = C.STATE_FILE
+        parent_dir = os.path.dirname(state_file)
         try:
-            afd, afile = tempfile.mkstemp()
-            header = "# ANSIBLE STATE FILE\n# VERSION 0.1\n# DO NOT MODIFY\n# %s" % datetime.datetime.utcnow().isoformat()
-            afd.write(header + yaml.safe_dump(self.ansible_state, default_flow_style=False))
-            os.rename(afile, state_file)
+            if not os.path.exists(parent_dir):
+                os.makedirs(parent_dir)
+            afile = tempfile.NamedTemporaryFile()
+            header = "# ANSIBLE STATE FILE\n# VERSION 0.1\n# DO NOT MODIFY\n# %s\n" % datetime.datetime.utcnow().isoformat()
+            # Strip out results from modules that don't maintain state but that we use the results for dependency ordering
+            state_record = dict()
+            for action in self.ansible_state:
+                action_records = [record for record in self.ansible_state[action] if not isinstance(record, ExecutionRecord)]
+                if action_records:
+                    state_record[action] = action_records
+            afile.write(header + yaml.dump(state_record, Dumper=AnsibleDumper, default_flow_style=False))
+            os.rename(afile.name, state_file)
         except OSError as e:
             raise AnsibleError("Couldn't write to state file %s: %s" % (state_file, to_text(e)))
 
@@ -213,19 +260,16 @@ class StrategyModule(StrategyBase):
         self.load_ansible_state()
         ordering = self.generate_task_ordering()
 
-        for (host, task) in ordering:
-            self.run_task(host, task)
-
-            results = self._process_pending_results(self.iterator)
-            # only modify ansible_state file if different
-            # self.save_ansible_state()
-            self.update_active_connections(results)
-
-            # pause briefly so we don't spin lock
-            time.sleep(C.DEFAULT_INTERNAL_POLL_INTERVAL)
+        for (state, task, task_vars, host) in ordering:
+            task_result = self.run_task(host, task, task_vars)
+            if task_result:
+                if task_result.get('failed'):
+                    result |= self._tqm.RUN_FAILED_BREAK_PLAY
+                elif task_result.get('changed'):
+                    self.save_ansible_state()
 
         # collect all the final results
-        results = self._wait_on_pending_results(self.iterator)
+        #results = self._wait_on_pending_results(self.iterator)
 
         # run the base class run() method, which executes the cleanup function
         # and runs any outstanding handlers which have been triggered
