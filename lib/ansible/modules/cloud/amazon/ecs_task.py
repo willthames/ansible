@@ -33,7 +33,7 @@ options:
     task_definition:
         description:
             - The task definition to start or run
-        required: False
+        required: True
     overrides:
         description:
             - A dictionary of values to pass to the new instances
@@ -220,7 +220,7 @@ def main():
     argument_spec.update(dict(
         operation=dict(required=True, choices=['run', 'start', 'stop']),
         cluster=dict(required=False, type='str'),  # R S P
-        task_definition=dict(required=False, type='str'),  # R* S*
+        task_definition=dict(required=True, type='str'),  # R* S*
         overrides=dict(required=False, type='dict'),  # R S
         count=dict(required=False, type='int'),  # R
         task=dict(required=False, type='str'),  # P*
@@ -228,7 +228,10 @@ def main():
         started_by=dict(required=False, type='str')  # R S
     ))
 
-    module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
+    module = AnsibleModule(argument_spec=argument_spec,
+                           supports_check_mode=True,
+                           required_if=[['operation', 'start', ['container_instances']],
+                                        ['operation', 'stop', ['task']]])
 
     # Validate Requirements
     if not HAS_BOTO3:
@@ -236,24 +239,14 @@ def main():
 
     # Validate Inputs
     if module.params['operation'] == 'run':
-        if 'task_definition' not in module.params and module.params['task_definition'] is None:
-            module.fail_json(msg="To run a task, a task_definition must be specified")
         task_to_list = module.params['task_definition']
         status_type = "RUNNING"
 
     if module.params['operation'] == 'start':
-        if 'task_definition' not in module.params and module.params['task_definition'] is None:
-            module.fail_json(msg="To start a task, a task_definition must be specified")
-        if 'container_instances' not in module.params and module.params['container_instances'] is None:
-            module.fail_json(msg="To start a task, container instances must be specified")
         task_to_list = module.params['task']
         status_type = "RUNNING"
 
     if module.params['operation'] == 'stop':
-        if 'task' not in module.params and module.params['task'] is None:
-            module.fail_json(msg="To stop a task, a task must be specified")
-        if 'task_definition' not in module.params and module.params['task_definition'] is None:
-            module.fail_json(msg="To stop a task, a task definition must be specified")
         task_to_list = module.params['task_definition']
         status_type = "STOPPED"
 
