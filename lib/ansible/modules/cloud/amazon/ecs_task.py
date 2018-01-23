@@ -169,15 +169,16 @@ class EcsExecManager:
         region, ec2_url, aws_connect_kwargs = get_aws_connection_info(module, boto3=True)
         self.ecs = boto3_conn(module, conn_type='client', resource='ecs', region=region, endpoint=ec2_url, **aws_connect_kwargs)
 
-    def list_tasks(self, cluster_name, service_name, status):
+    def list_tasks(self, cluster_name, task_definition, status):
+        family = ':'.join(task_definition.split(':')[:-1])
         response = self.ecs.list_tasks(
             cluster=cluster_name,
-            family=service_name,
+            family=family,
             desiredStatus=status
         )
         if len(response['taskArns']) > 0:
             for c in response['taskArns']:
-                if c.endswith(service_name):
+                if c.endswith(task_definition):
                     return c
         return None
 
