@@ -192,7 +192,7 @@ class EcsExecManager:
             count=count,
             startedBy=startedBy)
         # include tasks and failures
-        return response['tasks']
+        return response['tasks'], response['failures']
 
     def start_task(self, cluster, task_definition, overrides, container_instances, startedBy):
         args = dict()
@@ -260,12 +260,14 @@ def main():
             results['task'] = existing
         else:
             if not module.check_mode:
-                results['task'] = service_mgr.run_task(
+                results['tasks'], results['failures'] = service_mgr.run_task(
                     module.params['cluster'],
                     module.params['task_definition'],
                     module.params['overrides'],
                     module.params['count'],
                     module.params['started_by'])
+            if results['failures']:
+                module.fail_json(msg="Couldn't run task", **results)
             results['changed'] = True
 
     elif module.params['operation'] == 'start':
