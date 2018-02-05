@@ -83,7 +83,7 @@ class StrategyModule(StrategyBase):
         leftovers = []
         for (state, task, task_vars, host) in unresolved:
             try:
-                task_vars.update(dict(ansible_state=self.ansible_state))
+                task_vars.update(dict(ansible_state=self.learned_state))
                 templar = Templar(loader=self._loader, variables=task_vars)
                 # attempt templating all the task arguments
                 for (k, v) in task.args.items():
@@ -104,7 +104,7 @@ class StrategyModule(StrategyBase):
 
     def generate_task_ordering(self):
         hosts = self.get_hosts_left(self.iterator)
-        self.ansible_state = dict()
+        self.learned_state = dict()
         unresolved = list()
         resolved = list()
         for host in hosts:
@@ -123,7 +123,7 @@ class StrategyModule(StrategyBase):
                 for arg in ['validate_state', 'enforce_state', 'state']:
                     if task.args.get(arg) is None:
                         task.args[arg] = getattr(self.play_context, arg)
-                _state = self.ansible_state.get(task.action, {}).get(task.args.get('resource_id'), {})
+                _state = self.expected_state.get(task.action, {}).get(task.args.get('resource_id'), {})
                 if _state:
                     task.args['_state'] = _state
                 unresolved.append((state, task, task_vars, host))
@@ -153,7 +153,7 @@ class StrategyModule(StrategyBase):
                 display.debug("getting variables")
                 task_vars = self._variable_manager.get_vars(play=self.iterator._play, host=host, task=task)
                 self.add_tqm_variables(task_vars, play=self.iterator._play)
-                task_vars['ansible_state'] = self.ansible_state
+                task_vars['ansible_state'] = self.learned_state
                 if task.args.get('state') is not None:
                     task_vars['state'] = task.args['state']
                 else:
@@ -201,9 +201,9 @@ class StrategyModule(StrategyBase):
                             elif result['_state'] == {'state': 'absent'}:
                                 result['_state'] = AbsentState()
                                 result['_state']['state'] = 'absent'
-                            if task.action not in self.ansible_state:
-                                self.ansible_state[task.action] = dict()
-                            self.ansible_state[task.action][task.args['resource_id']] = result['_state']
+                            if task.action not in self.learned_state:
+                                self.learned_state[task.action] = dict()
+                            self.learned_state[task.action][task.args['resource_id']] = result['_state']
                         #self.update_active_connections(results)
 
                         # pause briefly so we don't spin lock
@@ -220,11 +220,11 @@ class StrategyModule(StrategyBase):
         if os.path.exists(state_file):
             try:
                 with open(state_file) as f:
-                    self.ansible_state = yaml.safe_load(f)
+                    self.expected_state = yaml.safe_load(f)
             except OSError as e:
                 raise AnsibleError("Couldn't read state file %s: " % (state_file, to_text(e)))
         else:
-            self.ansible_state = {}
+            self.expected_state = {}
 
     def save_ansible_state(self):
         state_file = C.STATE_FILE
@@ -236,8 +236,9 @@ class StrategyModule(StrategyBase):
             header = "# ANSIBLE STATE FILE\n# VERSION 0.1\n# DO NOT MODIFY\n# %s\n" % datetime.datetime.utcnow().isoformat()
             # Strip out results from modules that don't maintain state but that we use the results for dependency ordering
             state_record = dict()
-            for action in self.ansible_state:
-                action_records = [record for record in self.ansible_state[action] if not isinstance(record, ExecutionRecord)]
+            for action in self.learned_state:
+                action_records = dict((k, v) for (k, v) in self.learned_state[action].items()
+                                      if not isinstance(v, ExecutionRecord) and not isinstance(v, AbsentState))
                 if action_records:
                     state_record[action] = action_records
             afile.write(header + yaml.dump(state_record, Dumper=AnsibleDumper, default_flow_style=False))
