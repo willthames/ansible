@@ -1,22 +1,6 @@
-- name: ensure independent state_file is {{ state }}
-  state_file:
-    path: "{{ tempdir }}/state_file"
-    content: 123
-    resource_id: "my_state_file"
-  register: independent_state_file
-
-- name: ensure dependent state_file is {{ state }}
-  state_file:
-    path: "{{ tempdir }}/state_file_2"
-    content: "{{ ansible_state.state_file.my_state_file.inode }}"
-    resource_id: "my_state_file_2"
-  register: dependent_state_file
-
 - name: lookup file
   stat:
     path: "{{ tempdir }}/state_file_2"
-    depends_on: "{{ ansible_state.state_file.my_state_file_2 }}"
-    resource_id: "stat_file_2"
   register: stat_file_2
 
 - name: assert that file 2 has correct state

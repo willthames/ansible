@@ -1697,7 +1697,7 @@ STATE_LOCK:
   name: Location of lock file used to prevent multiple writes to the state file
   default:
   description: When using the 'state' strategy, the location of the lock file used to protect state from simultaneous write access
-  env: [{name: ANSIBLE_STATE_FILE}]
+  env: [{name: ANSIBLE_STATE_LOCK}]
   ini:
   - {key: state_lock, section: state}
   type: string
