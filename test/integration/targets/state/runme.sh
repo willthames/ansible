@@ -25,4 +25,4 @@ run_test "Validate state" playbooks/validate-state.yml --validate-state $@ && \
 run_test "Enforce state" playbooks/state-test.yml --enforce-state $@
 
 # Clean up
-run_test "Clean up after tests" playbooks/state-test.yml --state absent -e state=absent $@
+#run_test "Clean up after tests" playbooks/state-test.yml --state absent -e state=absent $@

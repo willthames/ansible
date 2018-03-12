@@ -74,7 +74,7 @@ class AnsibleStateModule(AnsibleModule):
                 diff = self.compare(existing, desired)
                 if diff:
                     if not self.check_mode:
-                        desired = self.update()
+                        desired = self.update(existing)
                         diff = self.compare(existing, desired)
                         changed = True
             else:
