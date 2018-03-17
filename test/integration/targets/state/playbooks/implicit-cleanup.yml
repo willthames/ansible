@@ -16,15 +16,18 @@
         that:
           - not first_state_file.changed
 
-    - name: attempt to modify content of corrupted file
-      state_file:
-        path: "{{ tempdir }}/state_file_2"
-        content: 456
-        resource_id: "my_state_file_2"
-      register: second_state_file
-      ignore_errors: yes
 
-    - name: assert that second state file task failed due to mismatched state
+- name: Check that second state file was implicitly removed
+  hosts: localhost
+  connection: local
+
+  tasks:
+    - name: lookup file
+      stat:
+        path: "{{ tempdir }}/state_file_2"
+      register: stat_file_2
+
+    - name: assert that file 2 no longer exists
       assert:
         that:
-          - second_state_file.failed
+          - not stat_file_2.stat.exists

@@ -92,10 +92,18 @@ class StateFileModule(AnsibleStateModule):
         return {'state': 'absent'}
 
     def predict(self, existing):
+        if self.params['state'] == 'absent':
+            return {'state': 'absent'}
+        if existing.get('path') == self.params['path']:
+            inode = existing.get('inode', '***COMPUTED***')
+        else:
+            inode = '***COMPUTED***'
+
         return dict(
             path=self.params['path'],
             content=self.params['content'],
-            inode='***COMPUTED***')
+            inode=inode,
+            state='present')
 
     def update(self, existing):
         if self.params['path'] != existing['path']:
@@ -109,13 +117,14 @@ class StateFileModule(AnsibleStateModule):
 
 def main():
     argument_spec = dict(
-        path=dict(required=True),
-        content=dict(required=True),
+        path=dict(type='path'),
+        content=dict(),
     )
 
     module = StateFileModule(
         argument_spec=argument_spec,
-        supports_check_mode=True
+        supports_check_mode=True,
+        required_if=[['state', 'present', ['path', 'content']]]
     )
     module.exit_json(**module.run())
 

@@ -27,7 +27,7 @@ class AnsibleStateModule(AnsibleModule):
             dict(resource_id=dict(),
                  depends_on=dict(type='list'),
                  _state=dict(type='dict'),
-                 validate_state=dict(type='bool', default=False),
+                 verify_state=dict(type='bool', default=False),
                  enforce_state=dict(type='bool', default=False),
                  state=dict(choices=['present', 'absent']),
             )
@@ -42,9 +42,9 @@ class AnsibleStateModule(AnsibleModule):
             return {'before': None, 'after': after}
         if not after:
             return {'before': before, 'after': None}
-        before = dict((k, v) for (k, v) in set(before.items()).difference(self.diff_ignore)
+        before = dict((k, before[k]) for k in set(before.keys()).difference(self.diff_ignore)
                       if before.get(k) != after.get(k))
-        after = dict((k, v) for (k, v) in set(after.items()).difference(self.diff_ignore)
+        after = dict((k, after[k]) for k in set(after.keys()).difference(self.diff_ignore)
                      if before.get(k) != after.get(k))
         return {'before': before, 'after': after}
 
@@ -54,17 +54,22 @@ class AnsibleStateModule(AnsibleModule):
         existing = self.params['_state']
         if existing is None:
             existing = self.get()
-        elif self.params['validate_state'] or self.params['enforce_state']:
+        elif self.params['verify_state'] or self.params['enforce_state']:
             actual = self.get()
             diff = self.compare(existing, actual)
             if diff:
                 if not self.params['enforce_state']:
                     self.fail_json(msg="Validation fail: Actual state does not match recorded state",
-                                   actual=actual, existing=existing)
+                                   actual=actual, existing=existing, diff=diff)
                 else:
-                    self.warn(msg="Validation warning: Actual state does not match recorded state",
-                              actual=actual, existing=existing)
+                    self.warn("Validation warning: Actual state does not match recorded state. diff: %s" % diff)
                     existing = actual
+
+        # override unset parameters from _state
+        for param in self.params.get('_state') or {}:
+            if param in self.params and self.params[param] is None:
+                self.params[param] = self.params['_state'][param]
+
         state = self.params['state']
 
         if state == 'present':

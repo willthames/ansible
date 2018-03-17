@@ -30,7 +30,7 @@ DOCUMENTATION = '''
     author: Will Thames
 '''
 
-from collections import defaultdict
+from collections import defaultdict, deque
 import datetime
 import os
 import tempfile
@@ -39,9 +39,11 @@ import yaml
 
 from ansible import constants as C
 from ansible.errors import AnsibleError, AnsibleUndefinedVariable
-from ansible.module_utils._text import to_text
+from ansible.module_utils._text import to_bytes, to_text
 from ansible.parsing.yaml.dumper import AnsibleDumper
-from ansible.playbook.included_file import IncludedFile
+# from ansible.playbook.included_file import IncludedFile
+from ansible.playbook.task import Task
+from ansible.playbook.block import Block
 from ansible.plugins.loader import action_loader
 from ansible.plugins.strategy import StrategyBase
 from ansible.template import Templar
@@ -66,6 +68,7 @@ class AbsentState():
 
     def __setitem__(self, k, v):
         self.data[k] = v
+
 
 class ExecutionRecord():
     ''' ExecutionRecord is to save enough data in results to allow tasks to
@@ -96,7 +99,7 @@ class StrategyModule(StrategyBase):
                 if result.get('failed') and not task.ignore_errors:
                     raise AnsibleError("Cannot generate task order with tasks that fail in check mode")
                 resolved.append((state, task, task_vars, host))
-            except AnsibleUndefinedVariable as e:
+            except AnsibleUndefinedVariable:
                 # hopefully we can resolve this in a later pass
                 leftovers.append((state, task, task_vars, host))
             time.sleep(1)
@@ -120,7 +123,7 @@ class StrategyModule(StrategyBase):
                 display.debug("done getting variables")
                 templar = Templar(loader=self._loader, variables=task_vars)
                 task.name = to_text(templar.template(task.name, fail_on_undefined=False), nonstring='empty')
-                for arg in ['validate_state', 'enforce_state', 'state']:
+                for arg in ['verify_state', 'enforce_state', 'state']:
                     if task.args.get(arg) is None:
                         task.args[arg] = getattr(self.play_context, arg)
                 _state = self.expected_state.get(task.action, {}).get(task.args.get('resource_id'), {})
@@ -164,7 +167,7 @@ class StrategyModule(StrategyBase):
                 try:
                     task.name = to_text(templar.template(task.name, fail_on_undefined=False), nonstring='empty')
                     display.debug("done templating")
-                except:
+                except Exception:
                     # just ignore any errors during task name templating,
                     # we don't care if it just shows the raw name
                     display.debug("templating failed for some reason")
@@ -207,10 +210,12 @@ class StrategyModule(StrategyBase):
                             elif result['_state'] == {'state': 'absent'}:
                                 result['_state'] = AbsentState()
                                 result['_state']['state'] = 'absent'
+                            if 'depends_on' in task.args:
+                                result['_state']['_meta'] = dict(depends_on=task.args['depends_on'])
                             if task.action not in self.learned_state:
                                 self.learned_state[task.action] = dict()
                             self.learned_state[task.action][task.args['resource_id']] = result['_state']
-                        #self.update_active_connections(results)
+                        # self.update_active_connections(results)
 
                         # pause briefly so we don't spin lock
                         time.sleep(C.DEFAULT_INTERNAL_POLL_INTERVAL)
@@ -247,10 +252,23 @@ class StrategyModule(StrategyBase):
                                       if not isinstance(v, ExecutionRecord) and not isinstance(v, AbsentState))
                 if action_records:
                     state_record[action] = action_records
-            afile.write(header + yaml.dump(state_record, Dumper=AnsibleDumper, default_flow_style=False))
+            afile.write(to_bytes(header + yaml.dump(state_record, Dumper=AnsibleDumper, default_flow_style=False)))
             os.rename(afile.name, state_file)
         except OSError as e:
             raise AnsibleError("Couldn't write to state file %s: %s" % (state_file, to_text(e)))
+
+    def sort_removed_state(self):
+        missing_state = dict()
+        ordering = deque()
+        for action in self.expected_state:
+            for resource_id in set(self.expected_state[action].keys()) - set(self.learned_state.get(action, {}).keys()):
+                missing_state[resource_id] = (action, self.expected_state[action][resource_id], resource_id)
+                depends_on = missing_state[resource_id][1].get('depends_on')
+                if depends_on and depends_on in ordering:
+                    ordering.appendleft(resource_id)
+                else:
+                    ordering.append(resource_id)
+        return [missing_state[resource_id] for resource_id in ordering]
 
     def run(self, iterator, play_context):
         '''
@@ -270,13 +288,25 @@ class StrategyModule(StrategyBase):
         for (state, task, task_vars, host) in ordering:
             task_result = self.run_task(host, task, task_vars)
             if task_result:
-                if task_result.get('failed'):
+                if task_result.get('failed') and not task.ignore_errors:
                     result |= self._tqm.RUN_FAILED_BREAK_PLAY
                 elif task_result.get('changed'):
                     self.save_ansible_state()
 
+        # use play of last task in loop
+        tidy_block = Block(play=task._parent._play)
+        tidyup = self.sort_removed_state()
+        if tidyup:
+            for (action, state, resource_id) in tidyup:
+                task_data = dict(action=action, args={})
+                task_data['args']['state'] = 'absent'
+                task_data['args']['_state'] = state
+                task_data['name'] = "Implicit clean up of resource " + resource_id
+                task = Task.load(task_data, block=tidy_block)
+                self.run_task(host, task, {})
+
         # collect all the final results
-        #results = self._wait_on_pending_results(self.iterator)
+        # results = self._wait_on_pending_results(self.iterator)
 
         # run the base class run() method, which executes the cleanup function
         # and runs any outstanding handlers which have been triggered

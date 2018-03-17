@@ -3,18 +3,13 @@
     path: "{{ tempdir }}/state_file_2"
   register: stat_file_2
 
+- debug:
+    var: state
+
+- debug:
+    var: stat_file_2
+
 - name: assert that file 2 has correct state
   assert:
     that:
       - (state == 'present')|ternary(stat_file_2.stat.exists, not stat_file_2.stat.exists)
-  ignore_errors: yes
-
-  # FIXME: This should work but needs setting up
-  # Question whether depends_on is ever likely to need with_items - i.e. is it a task argument or task attribute?
-  # Task argument is easier though. Either way, depends_on needs to take lists, and needs an always_after key
-  # for tests that happen after an action.
-  #depends_on:
-  #  - resource_id: "{{ ansible_state.stat.stat_file_2 }}"
-  #    always_after: yes
-
-# FIXME: add some with_items resources

@@ -830,7 +830,7 @@ class AnsibleModule(object):
         # Rather than modify the module to support the state argument_spec, remove any state arguments
         if self.supports_state and not self.maintains_state:
             self.params.pop('enforce_state', None)
-            self.params.pop('validate_state', None)
+            self.params.pop('verify_state', None)
             self.params.pop('depends_on', None)
             self.params.pop('resource_id', None)
             self.params.pop('state', None)

@@ -1,0 +1,10 @@
+- name: Corrupt the state
+  hosts: localhost
+  connection: local
+  any_errors_fatal: yes
+
+  tasks:
+    - name: insert unexpected content into state file 2
+      copy:
+        content: "Unexpected item in bagging area"
+        dest: "{{ tempdir }}/state_file_2"

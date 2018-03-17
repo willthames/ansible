@@ -7,8 +7,8 @@ function run_test() {
   shift
   echo "**** RUNNING $name ****"
   cmd="ansible-playbook -e tempdir=$MYTMPDIR -v $@"
-  echo $cmd
-  ANSIBLE_KEEP_REMOTE_FILES=1 ANSIBLE_STATE_FILE=$(basename $(dirname $MYTMPDIR)) $cmd
+  echo ANSIBLE_KEEP_REMOTE_FILES=1 ANSIBLE_STATE_FILE=$MYTMPDIR/ansible.state $cmd
+  ANSIBLE_KEEP_REMOTE_FILES=1 ANSIBLE_STATE_FILE=$MYTMPDIR/ansible.state $cmd
   rc=$?
   echo $rc
   return $rc
@@ -22,7 +22,8 @@ run_test "Making things present" playbooks/state-test.yml $@ && \
 run_test "Checking it twice" playbooks/state-test.yml $@ && \
 run_test "Corrupt state" playbooks/corrupt-state.yml $@ && \
 run_test "Validate state" playbooks/validate-state.yml --validate-state $@ && \
-run_test "Enforce state" playbooks/state-test.yml --enforce-state $@
+run_test "Enforce state" playbooks/state-test.yml --enforce-state $@ && \
+run_test "Implicit cleanup" playbooks/implicit-cleanup.yml --validate-state $@
 
 # Clean up
 #run_test "Clean up after tests" playbooks/state-test.yml --state absent -e state=absent $@

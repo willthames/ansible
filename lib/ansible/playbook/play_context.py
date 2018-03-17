@@ -132,7 +132,7 @@ class PlayContext(Base):
     _step = FieldAttribute(isa='bool', default=False)
     # state flags
     _state = FieldAttribute(isa='string')
-    _validate_state = FieldAttribute(isa='bool')
+    _verify_state = FieldAttribute(isa='bool')
     _enforce_state = FieldAttribute(isa='bool')
 
     def __init__(self, play=None, passwords=None, connection_lockfd=None):
@@ -211,6 +211,7 @@ class PlayContext(Base):
 
         # Not every cli that uses PlayContext has these command line args so have a default
         self.start_at_task = context.CLIARGS.get('start_at_task', None)  # Else default
+        self.state = context.CLIARGS.get('state', 'present')  # Else default
 
     def set_task_and_variable_override(self, task, variables, templar):
         '''

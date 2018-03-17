@@ -265,6 +265,12 @@ class FieldAttributeBase(with_metaclass(BaseMeta, object)):
             raise AnsibleParserError("'%s' is not a valid value for debugger. Must be one of %s" % (value, ', '.join(valid_values)), obj=self.get_ds())
         return value
 
+    def _validate_state(self, attr, name, value):
+        valid_values = frozenset(('present', 'absent'))
+        if value and isinstance(value, string_types) and value not in valid_values:
+            raise AnsibleParserError("'%s' is not a valid value for state. Must be one of %s" % (value, ', '.join(valid_values)), obj=self.get_ds())
+        return value
+
     def _validate_attributes(self, ds):
         '''
         Ensures that there are no keys in the datastructure which do
@@ -611,6 +617,11 @@ class Base(FieldAttributeBase):
     _check_mode = FieldAttribute(isa='bool', default=context.cliargs_deferred_get('check'))
     _diff = FieldAttribute(isa='bool', default=context.cliargs_deferred_get('diff'))
     _any_errors_fatal = FieldAttribute(isa='bool', default=C.ANY_ERRORS_FATAL)
+
+    # state
+    _state = FieldAttribute(isa='string', default=context.cliargs_deferred_get('state'))
+    _verify_state = FieldAttribute(isa='bool', default=context.cliargs_deferred_get('verify_state'))
+    _enforce_state = FieldAttribute(isa='bool', default=context.cliargs_deferred_get('enforce_state'))
 
     # explicitly invoke a debugger on tasks
     _debugger = FieldAttribute(isa='string')

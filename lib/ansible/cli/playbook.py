@@ -54,7 +54,8 @@ class PlaybookCLI(CLI):
                                help="start the playbook at the task matching this name")
         self.parser.add_option('--state', dest='state', default='present',
                                help="Desired state for playbook run")
-        self.parser.add_option('--validate_state', dest='validate_state', action='store_true', default=False,
+        # we can't use validate_state as a name from here on because it clashes with how playbook/Base validates options
+        self.parser.add_option('--validate-state', dest='verify_state', action='store_true', default=False,
                                help="Whether to check whether recorded state matches actual state before changes are made")
         self.parser.add_option('--enforce-state', dest='enforce_state', action='store_true', default=False,
                                help="Whether to set desired state even when recorded state does not match")

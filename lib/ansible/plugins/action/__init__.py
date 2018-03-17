@@ -45,6 +45,7 @@ class ActionBase(with_metaclass(ABCMeta, object)):
 
     # A set of valid arguments
     _VALID_ARGS = frozenset([])
+    STATE_VALID_ARGS = frozenset(['state', 'enforce_state', 'verify_state', 'depends_on'])
 
     def __init__(self, task, connection, play_context, loader, templar, shared_loader_obj):
         self._task = task
@@ -105,7 +106,7 @@ class ActionBase(with_metaclass(ABCMeta, object)):
         # Error if invalid argument is passed
         if self._VALID_ARGS:
             task_opts = frozenset(self._task.args.keys())
-            bad_opts = task_opts.difference(self._VALID_ARGS)
+            bad_opts = task_opts.difference(self._VALID_ARGS | self.STATE_VALID_ARGS)
             if bad_opts:
                 raise AnsibleActionFail('Invalid options for %s: %s' % (self._task.action, ','.join(list(bad_opts))))
 
