@@ -233,6 +233,57 @@
             recreate_waf_regex_condition.condition.regex_match_tuples[0].regex_pattern_set_id !=
             create_waf_regex_condition.condition.regex_match_tuples[0].regex_pattern_set_id
 
+  - name: update WAF regex condition
+    aws_waf_condition:
+      name: "{{ resource_prefix }}_regex_condition"
+      filters:
+        - field_to_match: query_string
+          regex_pattern:
+            name: greetings
+            regex_strings:
+              - '[hH]ello'
+              - '^Hi there'
+              - '.*Good [dD]ay to [Yy]ou'
+      type: regex
+      <<: *aws_connection_info
+    register: update_waf_regex_condition
+
+  - name: check that the waf condition changed
+    assert:
+      that:
+        - update_waf_regex_condition.changed
+
+  - name: allow reuse of regex pattern without respecifying regex_strings
+    aws_waf_condition:
+      name: "{{ resource_prefix }}_regex_condition_part_2"
+      filters:
+        - field_to_match: query_string
+          regex_pattern:
+            name: greetings
+      type: regex
+      <<: *aws_connection_info
+    register: update_waf_regex_condition
+
+  - name: rerun in first WAF regex condition to check it doesn't change
+    aws_waf_condition:
+      name: "{{ resource_prefix }}_regex_condition"
+      filters:
+        - field_to_match: query_string
+          regex_pattern:
+            name: greetings
+            regex_strings:
+              - '[hH]ello'
+              - '^Hi there'
+              - '.*Good [dD]ay to [Yy]ou'
+      type: regex
+      <<: *aws_connection_info
+    register: rerun_waf_regex_condition
+
+  - name: check that the waf condition does not change
+    assert:
+      that:
+        - not rerun_waf_regex_condition.changed
+
   ##################################################
   # aws_waf_rule tests
   ##################################################
