@@ -353,6 +353,7 @@ class Condition(object):
         # Prep kwargs
         kwargs = dict()
         kwargs['Updates'] = list()
+        changed = False
 
         for filtr in self.module.params.get('filters'):
             # Only for ip_set
@@ -392,12 +393,13 @@ class Condition(object):
 
             # Specific for regex_match_set
             if self.type == 'regex':
-                condition_insert['RegexPatternSetId'] = self.ensure_regex_pattern_present(filtr.get('regex_pattern'))['RegexPatternSetId']
+                filtr_change, condition_insert['RegexPatternSetId'] = self.ensure_regex_pattern_present(filtr.get('regex_pattern'))
+                changed |= filtr_change
 
             kwargs['Updates'].append({'Action': 'INSERT', self.conditiontuple: condition_insert})
 
         kwargs[self.conditionsetid] = condition_set_id
-        return kwargs
+        return changed, kwargs
 
     def format_for_deletion(self, condition):
         return {'Updates': [{'Action': 'DELETE', self.conditiontuple: current_condition_tuple}
@@ -438,21 +440,29 @@ class Condition(object):
 
     def ensure_regex_pattern_present(self, regex_pattern):
         name = regex_pattern['name']
+        changed = False
+        missing = None
+        extra = None
 
         pattern_set = self.get_regex_pattern_by_name(name)
         if not pattern_set:
-            pattern_set = run_func_with_change_token_backoff(self.client, self.module, {'Name': name},
-                                                             self.client.create_regex_pattern_set)['RegexPatternSet']
-        missing = set(regex_pattern['regex_strings']) - set(pattern_set['RegexPatternStrings'])
-        extra = set(pattern_set['RegexPatternStrings']) - set(regex_pattern['regex_strings'])
+            if 'regex_strings' in regex_pattern:
+                pattern_set = run_func_with_change_token_backoff(self.client, self.module, {'Name': name},
+                                                                 self.client.create_regex_pattern_set)['RegexPatternSet']
+            else:
+                self.module.fail_json("regex_pattern with name (%s) must exist if no regex_strings are provided" % name)
+        if 'regex_strings' in regex_pattern:
+            missing = set(regex_pattern['regex_strings']) - set(pattern_set['RegexPatternStrings'])
+            extra = set(pattern_set['RegexPatternStrings']) - set(regex_pattern['regex_strings'])
         if not missing and not extra:
-            return pattern_set
+            return changed, pattern_set['RegexPatternSetId']
         updates = [{'Action': 'INSERT', 'RegexPatternString': pattern} for pattern in missing]
         updates.extend([{'Action': 'DELETE', 'RegexPatternString': pattern} for pattern in extra])
         run_func_with_change_token_backoff(self.client, self.module,
                                            {'RegexPatternSetId': pattern_set['RegexPatternSetId'], 'Updates': updates},
                                            self.client.update_regex_pattern_set, wait=True)
-        return self.get_regex_pattern_set_with_backoff(pattern_set['RegexPatternSetId'])['RegexPatternSet']
+        changed = True
+        return changed, self.get_regex_pattern_set_with_backoff(pattern_set['RegexPatternSetId'])['RegexPatternSet']['RegexPatternSetId']
 
     def delete_unused_regex_pattern(self, regex_pattern_set_id):
         try:
@@ -570,7 +580,7 @@ class Condition(object):
 
     def find_and_update_condition(self, condition_set_id):
         current_condition = self.get_condition_by_id(condition_set_id)
-        update = self.format_for_update(condition_set_id)
+        changed, update = self.format_for_update(condition_set_id)
         missing = self.find_missing(update, current_condition)
         if self.module.params.get('purge_filters'):
             extra = [{'Action': 'DELETE', self.conditiontuple: current_tuple}
@@ -578,18 +588,14 @@ class Condition(object):
                      if current_tuple not in [desired[self.conditiontuple] for desired in update['Updates']]]
         else:
             extra = []
-        changed = bool(missing or extra)
-        if changed:
+        if missing or extra:
+            changed = True
             update['Updates'] = missing + extra
             func = getattr(self.client, 'update_' + self.method_suffix)
             try:
                 result = run_func_with_change_token_backoff(self.client, self.module, update, func, wait=True)
             except botocore.exceptions.WaiterError as e:
-                self.module.fail_json_aws(
-                    e,
-                    msg='Change token did not sync, or took too long %s : %s' % (
-                        result['ChangeToken'],
-                        self.client.get_change_token_status(ChangeToken=result['ChangeToken'])))
+                self.module.fail_json_aws(e, msg='Change token did not sync, or took too long')
             except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as e:
                 self.module.fail_json_aws(e, msg='Could not update condition')
         return changed, self.get_condition_by_id(condition_set_id)
