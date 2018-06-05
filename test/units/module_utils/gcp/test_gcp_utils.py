@@ -243,3 +243,5 @@ class GCPRequestDifferenceTestCase(unittest.TestCase):
         request2 = GcpRequest(value2)
         self.assertNotEquals(request1, request2)
         self.assertEquals(request1.difference(request2), difference)
+
+
