@@ -33,7 +33,7 @@ options:
     job_type:
       description:
         - The job type to use for the job template.
-      required: True
+        - Required if C(state) is C(present)
       choices: ["run", "check", "scan"]
     inventory:
       description:
@@ -41,11 +41,11 @@ options:
     project:
       description:
         - Name of the project to use for the job template.
-      required: True
+        - Required if C(state) is C(present)
     playbook:
       description:
         - Path to the playbook to use for the job template within the project provided.
-      required: True
+        - Required if C(state) is C(present)
     credential:
       description:
         - Name of the credential to use for the job template.
@@ -254,10 +254,10 @@ def main():
     argument_spec.update(dict(
         name=dict(required=True),
         description=dict(default=''),
-        job_type=dict(choices=['run', 'check', 'scan'], required=True),
+        job_type=dict(choices=['run', 'check', 'scan']),
         inventory=dict(default=''),
-        project=dict(required=True),
-        playbook=dict(required=True),
+        project=dict(),
+        playbook=dict(),
         credential=dict(default=''),
         vault_credential=dict(default=''),
         forks=dict(type='int'),
@@ -287,7 +287,9 @@ def main():
         state=dict(choices=['present', 'absent'], default='present'),
     ))
 
-    module = AnsibleModule(argument_spec=argument_spec, supports_check_mode=True)
+    module = AnsibleModule(argument_spec=argument_spec,
+                           supports_check_mode=True,
+                           required_if=[['state', 'present', ['playbook', 'project', 'job_type']]])
 
     if not HAS_TOWER_CLI:
         module.fail_json(msg='ansible-tower-cli required for this module')
