@@ -287,11 +287,10 @@ def main():
     if fetch:
         if state == 'present':
             if is_different(module, fetch):
-                update(module, self_link(module), kind)
-                fetch = fetch_resource(module, self_link(module), kind)
+                fetch = update(module, self_link(module), kind, fetch)
                 changed = True
         else:
-            delete(module, self_link(module), kind)
+            delete(module, self_link(module), kind, fetch)
             fetch = {}
             changed = True
     else:
@@ -311,12 +310,12 @@ def create(module, link, kind):
     return wait_for_operation(module, auth.post(link, resource_to_request(module)))
 
 
-def update(module, link, kind):
-    delete(module, self_link(module), kind)
-    create(module, collection(module), kind)
+def update(module, link, kind, fetch):
+    auth = GcpSession(module, 'compute')
+    return wait_for_operation(module, auth.put(link, resource_to_request(module)))
 
 
-def delete(module, link, kind):
+def delete(module, link, kind, fetch):
     auth = GcpSession(module, 'compute')
     return wait_for_operation(module, auth.delete(link))
 
