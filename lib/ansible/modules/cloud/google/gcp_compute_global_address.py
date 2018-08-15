@@ -217,8 +217,7 @@ def create(module, link, kind):
 
 
 def update(module, link, kind):
-    delete(module, self_link(module), kind)
-    create(module, collection(module), kind)
+    module.fail_json(msg="GlobalAddress cannot be edited")
 
 
 def delete(module, link, kind):
