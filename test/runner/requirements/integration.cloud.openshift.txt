@@ -1,1 +1,1 @@
-openshift
+openshift>=0.6.2
