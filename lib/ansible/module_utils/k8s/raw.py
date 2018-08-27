@@ -40,6 +40,7 @@ class KubernetesRawModule(KubernetesAnsibleModule):
         argument_spec = copy.deepcopy(COMMON_ARG_SPEC)
         argument_spec.update(copy.deepcopy(AUTH_ARG_SPEC))
         argument_spec['merge_type'] = dict(type='list', choices=['json', 'merge', 'strategic-merge'])
+        argument_spec['append_hash'] = dict(type='bool', default=False)
         return argument_spec
 
     def __init__(self, *args, **kwargs):
@@ -54,11 +55,16 @@ class KubernetesRawModule(KubernetesAnsibleModule):
                                          supports_check_mode=True,
                                          **kwargs)
 
-        self.kind = self.params.pop('kind')
-        self.api_version = self.params.pop('api_version')
-        self.name = self.params.pop('name')
-        self.namespace = self.params.pop('namespace')
-        resource_definition = self.params.pop('resource_definition')
+        self.kind = self.params.get('kind')
+        self.api_version = self.params.get('api_version')
+        self.name = self.params.get('name')
+        self.namespace = self.params.get('namespace')
+        resource_definition = self.params.get('resource_definition')
+        self.append_hash = self.params.get('append_hash')
+        if self.append_hash:
+            from distutils.version import LooseVersion
+            if LooseVersion(self.openshift_version) < LooseVersion("0.6.3"):
+                self.fail_json(msg="openshift >= 0.6.3 is required for append_hash")
         if resource_definition:
             if isinstance(resource_definition, string_types):
                 try:
@@ -69,7 +75,7 @@ class KubernetesRawModule(KubernetesAnsibleModule):
                 self.resource_definitions = resource_definition
             else:
                 self.resource_definitions = [resource_definition]
-        src = self.params.pop('src')
+        src = self.params.get('src')
         if src:
             self.resource_definitions = self.load_resource_definitions(src)
 
@@ -137,7 +143,10 @@ class KubernetesRawModule(KubernetesAnsibleModule):
             return result
 
         try:
-            existing = resource.get(name=name, namespace=namespace)
+            params = dict(name=name, namespace=namespace)
+            if self.append_hash:
+                params.update(dict(append_hash=True, body=definition))
+            existing = resource.get(**params)
         except NotFoundError:
             pass
         except ForbiddenError as exc:
@@ -158,7 +167,7 @@ class KubernetesRawModule(KubernetesAnsibleModule):
                 # Delete the object
                 if not self.check_mode:
                     try:
-                        k8s_obj = resource.delete(name, namespace=namespace)
+                        k8s_obj = resource.delete(**params)
                         result['result'] = k8s_obj.to_dict()
                     except DynamicApiError as exc:
                         self.fail_json(msg="Failed to delete object: {0}".format(exc.body),
@@ -171,7 +180,7 @@ class KubernetesRawModule(KubernetesAnsibleModule):
                     k8s_obj = definition
                 else:
                     try:
-                        k8s_obj = resource.create(definition, namespace=namespace).to_dict()
+                        k8s_obj = resource.create(definition, namespace=namespace, append_hash=self.append_hash).to_dict()
                     except ConflictError:
                         # Some resources, like ProjectRequests, can't be created multiple times,
                         # because the resources that they create don't match their kind
@@ -195,7 +204,7 @@ class KubernetesRawModule(KubernetesAnsibleModule):
                     k8s_obj = definition
                 else:
                     try:
-                        k8s_obj = resource.replace(definition, name=name, namespace=namespace).to_dict()
+                        k8s_obj = resource.replace(definition, name=name, namespace=namespace, append_hash=self.append_hash).to_dict()
                     except DynamicApiError as exc:
                         self.fail_json(msg="Failed to replace object: {0}".format(exc.body),
                                        error=exc.status, status=exc.status, reason=exc.reason)
@@ -232,9 +241,12 @@ class KubernetesRawModule(KubernetesAnsibleModule):
             result['diff'] = diffs
             return result
 
+
     def patch_resource(self, resource, definition, existing, name, namespace, merge_type=None):
         try:
             params = dict(name=name, namespace=namespace)
+            if self.append_hash:
+                params['append_hash'] = self.append_hash
             if merge_type:
                 params['content_type'] = 'application/{0}-patch+json'.format(merge_type)
             k8s_obj = resource.patch(definition, **params).to_dict()

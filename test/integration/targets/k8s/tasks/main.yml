@@ -340,6 +340,66 @@
         namespace: testing4
         state: absent
 
+
+    - name: Create config map
+      k8s:
+        definition:
+          metadata:
+            name: config-map-test
+            namespace: testing5
+          apiVersion: v1
+          kind: ConfigMap
+          data:
+            hello: world
+        append_hash: yes
+      register: k8s_configmap1
+
+    - name: check configmap is created with a hash
+      assert:
+        that:
+          - k8s_configmap1 is changed
+          - k8s_configmap1.result.metadata.name != 'config-map-test'
+          - k8s_configmap1.result.metadata.name[:-10] == 'config-map-test-'
+
+    - name: recreate same config map
+      k8s:
+        definition:
+          metadata:
+            name: config-map-test
+            namespace: testing5
+          apiVersion: v1
+          kind: ConfigMap
+          data:
+            hello: world
+        append_hash: yes
+      register: k8s_configmap2
+
+    - name: check configmaps are different
+      assert:
+        that:
+          - k8s_configmap2 is not changed
+          - k8s_configmap1.result.metadata.name == k8s_configmap2.result.metadata.name
+
+    - name: add key to config map
+      k8s:
+        definition:
+          metadata:
+            name: config-map-test
+            namespace: testing5
+          apiVersion: v1
+          kind: ConfigMap
+          data:
+            hello: world
+            another: value
+        append_hash: yes
+      register: k8s_configmap3
+
+    - name: check configmaps are different
+      assert:
+        that:
+          - k8s_configmap3 is changed
+          - k8s_configmap1.result.metadata.name != k8s_configmap3.result.metadata.name
+
     - name: Delete resources from a list
       k8s:
         state: absent
@@ -368,6 +428,39 @@
       loop: "{{ k8s_facts.results }}"
 
   always:
+    - name: remove config map1
+      k8s:
+        name: "{{ k8s_configmap1.result.metadata.name }}"
+        namespace: testing5
+        api_version: v1
+        kind: ConfigMap
+        state: absent
+      ignore_errors: yes
+
+    - name: remove config map2
+      k8s:
+        name: "{{ k8s_configmap2.result.metadata.name }}"
+        namespace: testing5
+        api_version: v1
+        kind: ConfigMap
+        state: absent
+      ignore_errors: yes
+
+    - name: remove config map3
+      k8s:
+        definition:
+          metadata:
+            name: config-map-test
+            namespace: testing5
+          apiVersion: v1
+          kind: ConfigMap
+          data:
+            hello: world
+            another: value
+        state: absent
+        append_hash: yes
+      ignore_errors: yes
+
     - name: remove crd
       k8s:
         definition: "{{ lookup('file', role_path + '/files/crd-resource.yml') }}"
