@@ -340,10 +340,9 @@
         namespace: testing4
         state: absent
 
-
-    - name: Create config map
-      k8s:
-        definition:
+    - name: create k8s_resource variable
+      set_fact:
+        k8s_resource:
           metadata:
             name: config-map-test
             namespace: testing5
@@ -351,6 +350,11 @@
           kind: ConfigMap
           data:
             hello: world
+
+    - name: Create config map
+      k8s:
+        definition: "{{ k8s_resource }}"
+
         append_hash: yes
       register: k8s_configmap1
 
@@ -361,16 +365,14 @@
           - k8s_configmap1.result.metadata.name != 'config-map-test'
           - k8s_configmap1.result.metadata.name[:-10] == 'config-map-test-'
 
+    - name: Check k8s_config_hash filter
+      assert:
+        that:
+          - (k8s_resource | k8s_config_hash) == k8s_configmap1.result.metadata.name[-10:]
+
     - name: recreate same config map
       k8s:
-        definition:
-          metadata:
-            name: config-map-test
-            namespace: testing5
-          apiVersion: v1
-          kind: ConfigMap
-          data:
-            hello: world
+        definition: "{{ k8s_resource }}"
         append_hash: yes
       register: k8s_configmap2
 
