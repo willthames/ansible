@@ -228,14 +228,14 @@ EXAMPLES = '''
 
 - name: create a node pool
   gcp_container_node_pool:
-    name: my-pool
-    initial_node_count: 4
-    cluster: "{{ cluster }}"
-    location: us-central1-a
-    project: test_project
-    auth_kind: serviceaccount
-    service_account_file: "/tmp/auth.pem"
-    state: present
+      name: "test_object"
+      initial_node_count: 4
+      cluster: "{{ cluster }}"
+      zone: us-central1-a
+      project: "test_project"
+      auth_kind: "serviceaccount"
+      service_account_file: "/tmp/auth.pem"
+      state: present
 '''
 
 RETURN = '''

@@ -55,13 +55,12 @@ extends_documentation_fragment: gcp
 EXAMPLES = '''
 - name: " a target pool facts"
   gcp_compute_target_pool_facts:
-    region: us-west1
-    filters:
-    - name = test_object
-    project: test_project
-    auth_kind: serviceaccount
-    service_account_file: "/tmp/auth.pem"
-    state: facts
+      region: us-west1
+      filters:
+      - name = test_object
+      project: test_project
+      auth_kind: serviceaccount
+      service_account_file: "/tmp/auth.pem"
 '''
 
 RETURN = '''

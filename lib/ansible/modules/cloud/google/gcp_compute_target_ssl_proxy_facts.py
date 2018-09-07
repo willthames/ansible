@@ -51,12 +51,11 @@ extends_documentation_fragment: gcp
 EXAMPLES = '''
 - name: " a target ssl proxy facts"
   gcp_compute_target_ssl_proxy_facts:
-    filters:
-    - name = test_object
-    project: test_project
-    auth_kind: serviceaccount
-    service_account_file: "/tmp/auth.pem"
-    state: facts
+      filters:
+      - name = test_object
+      project: test_project
+      auth_kind: serviceaccount
+      service_account_file: "/tmp/auth.pem"
 '''
 
 RETURN = '''

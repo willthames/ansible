@@ -118,13 +118,13 @@ EXAMPLES = '''
 
 - name: create a bucket access control
   gcp_storage_bucket_access_control:
-    bucket: test_object
-    entity: user-alexstephen@google.com
-    role: WRITER
-    project: test_project
-    auth_kind: serviceaccount
-    service_account_file: "/tmp/auth.pem"
-    state: present
+      bucket: "{{ bucket }}"
+      entity: user-alexstephen@google.com
+      role: WRITER
+      project: "test_project"
+      auth_kind: "serviceaccount"
+      service_account_file: "/tmp/auth.pem"
+      state: present
 '''
 
 RETURN = '''

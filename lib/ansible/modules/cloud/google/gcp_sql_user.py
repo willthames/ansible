@@ -92,14 +92,14 @@ EXAMPLES = '''
 
 - name: create a user
   gcp_sql_user:
-    name: test-user
-    host: 10.1.2.3
-    password: secret-password
-    instance: "{{ instance }}"
-    project: test_project
-    auth_kind: serviceaccount
-    service_account_file: "/tmp/auth.pem"
-    state: present
+      name: test-user
+      host: 10.1.2.3
+      password: secret-password
+      instance: "{{ instance }}"
+      project: "test_project"
+      auth_kind: "serviceaccount"
+      service_account_file: "/tmp/auth.pem"
+      state: present
 '''
 
 RETURN = '''

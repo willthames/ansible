@@ -51,12 +51,11 @@ extends_documentation_fragment: gcp
 EXAMPLES = '''
 - name: " a image facts"
   gcp_compute_image_facts:
-    filters:
-    - name = test_object
-    project: test_project
-    auth_kind: serviceaccount
-    service_account_file: "/tmp/auth.pem"
-    state: facts
+      filters:
+      - name = test_object
+      project: test_project
+      auth_kind: serviceaccount
+      service_account_file: "/tmp/auth.pem"
 '''
 
 RETURN = '''
