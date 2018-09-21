@@ -6,8 +6,9 @@ from __future__ import absolute_import, print_function
 import os
 
 from lib.util import (
+    ApplicationError,
     display,
-    ConfigParser,
+    is_shippable,
 )
 
 from lib.cloud import (
@@ -15,6 +16,9 @@ from lib.cloud import (
     CloudEnvironment,
     CloudEnvironmentConfig,
 )
+
+from lib.core_ci import (
+    AnsibleCoreCI, )
 
 
 class GcpCloudProvider(CloudProvider):
