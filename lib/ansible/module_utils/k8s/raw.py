@@ -191,6 +191,8 @@ class KubernetesRawModule(KubernetesAnsibleModule):
             diffs = []
 
             if existing and force:
+                self.preserve_hidden_data(definition, existing)
+
                 if self.check_mode:
                     k8s_obj = definition
                 else:
@@ -261,3 +263,17 @@ class KubernetesRawModule(KubernetesAnsibleModule):
         result['changed'] = True
         result['method'] = 'create'
         return result
+
+    def preserve_hidden_data(self, definition, existing):
+        # Avoid 422 responses
+        definition['metadata']['resourceVersion'] = existing.metadata.resourceVersion
+        # Ensure Service has its clusterIP set
+        if definition['kind'] == 'Service' and existing.spec.clusterIP:
+            definition['spec']['clusterIP'] = existing.spec.clusterIP
+        # Ensure Deployment has a revision set to avoid unnecessary changes
+        if definition['kind'] == 'Deployment' and existing.metadata.annotations['deployment.kubernetes.io/revision']:
+            definition['metadata']['annotations'] = definition['metadata'].get('annotations') or dict()
+            definition['metadata']['annotations']['deployment.kubernetes.io/revision'] = existing.metadata.annotations['deployment.kubernetes.io/revision']
+        # Ensure ServiceAccount maintains its secret
+        if definition['kind'] == 'ServiceAccount' and existing.secrets:
+            definition['secrets'] = existing.secrets
