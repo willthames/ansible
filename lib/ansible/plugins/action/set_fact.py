@@ -26,6 +26,17 @@ from ansible.utils.vars import isidentifier
 import ansible.constants as C
 
 
+def debug(value):
+    if not value:
+        return value
+    if not isinstance(value, (list, dict)):
+        return type(value).__name__
+    if isinstance(value, list):
+        return dict(list=debug(value[0]))
+    else:
+        return dict(dict={k: debug(v) for (k, v) in value.items()})
+
+
 class ActionModule(ActionBase):
 
     TRANSFERS_FILES = False
@@ -54,6 +65,7 @@ class ActionModule(ActionBase):
                 if not C.DEFAULT_JINJA2_NATIVE and isinstance(v, string_types) and v.lower() in ('true', 'false', 'yes', 'no'):
                     v = boolean(v, strict=False)
                 facts[k] = v
+                facts[k + '_type'] = debug(v)
 
         result['changed'] = False
         result['ansible_facts'] = facts
