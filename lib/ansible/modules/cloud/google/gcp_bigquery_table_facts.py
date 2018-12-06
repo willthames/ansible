@@ -18,14 +18,15 @@
 # ----------------------------------------------------------------------------
 
 from __future__ import absolute_import, division, print_function
-
 __metaclass__ = type
 
 ################################################################################
 # Documentation
 ################################################################################
 
-ANSIBLE_METADATA = {'metadata_version': '1.1', 'status': ["preview"], 'supported_by': 'community'}
+ANSIBLE_METADATA = {'metadata_version': '1.1',
+                    'status': ["preview"],
+                    'supported_by': 'community'}
 
 DOCUMENTATION = '''
 ---
@@ -48,18 +49,17 @@ extends_documentation_fragment: gcp
 '''
 
 EXAMPLES = '''
-- name: " a table facts"
+- name:  a table facts
   gcp_bigquery_table_facts:
-    dataset: example_dataset
-    project: test_project
-    auth_kind: serviceaccount
-    service_account_file: "/tmp/auth.pem"
-    state: facts
+      dataset: example_dataset
+      project: test_project
+      auth_kind: serviceaccount
+      service_account_file: "/tmp/auth.pem"
 '''
 
 RETURN = '''
-resources:
-  description: List of resources
+items:
+  description: List of items
   returned: always
   type: complex
   contains:
@@ -513,7 +513,11 @@ import json
 
 
 def main():
-    module = GcpModule(argument_spec=dict(dataset=dict(type='str')))
+    module = GcpModule(
+        argument_spec=dict(
+            dataset=dict(type='str')
+        )
+    )
 
     if not module.params['scopes']:
         module.params['scopes'] = ['https://www.googleapis.com/auth/bigquery']
@@ -523,7 +527,9 @@ def main():
         items = items.get('tables')
     else:
         items = []
-    return_value = {'resources': items}
+    return_value = {
+        'items': items
+    }
     module.exit_json(**return_value)
 
 
