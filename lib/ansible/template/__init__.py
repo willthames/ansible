@@ -623,6 +623,7 @@ class Templar:
                         else:
                             ran = wrap_var(ran)
 
+                display.debug("_lookup: self.cur_context " + str(getattr(self, 'cur_context', "None")))
                 if self.cur_context:
                     self.cur_context.unsafe = True
             return ran
@@ -687,11 +688,19 @@ class Templar:
 
             jvars = AnsibleJ2Vars(self, t.globals)
 
+            display.debug("self.cur_context " + str(getattr(self, 'cur_context', "None")))
             self.cur_context = new_context = t.new_context(jvars, shared=True)
+            display.debug("new_context " + str(new_context))
             rf = t.root_render_func(new_context)
+            display.debug("new_context " + str(new_context))
+            if hasattr(new_context, 'unsafe'):
+                display.debug("new_context.unsafe " + str(new_context.unsafe))
 
             try:
                 res = j2_concat(rf)
+                display.debug("new_context " + str(new_context))
+                if hasattr(new_context, 'unsafe'):
+                    display.debug("new_context.unsafe " + str(new_context.unsafe))
                 if getattr(new_context, 'unsafe', False):
                     res = wrap_var(res)
             except TypeError as te:
