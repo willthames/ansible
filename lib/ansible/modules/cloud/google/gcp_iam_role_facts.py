@@ -44,12 +44,11 @@ extends_documentation_fragment: gcp
 '''
 
 EXAMPLES = '''
-- name: " a role facts"
+- name:  a role facts
   gcp_iam_role_facts:
-    project: test_project
-    auth_kind: serviceaccount
-    service_account_file: "/tmp/auth.pem"
-    state: facts
+      project: test_project
+      auth_kind: serviceaccount
+      service_account_file: "/tmp/auth.pem"
 '''
 
 RETURN = '''
