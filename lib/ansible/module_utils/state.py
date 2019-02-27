@@ -18,22 +18,30 @@
 from ansible.module_utils.basic import AnsibleModule
 
 
+COMPUTED_SENTINEL = '*** COMPUTED ***'
+
+
 class AnsibleStateModule(AnsibleModule):
 
-    def __init__(self, argument_spec, **kwargs):
+    def __init__(self, **kwargs):
         kwargs['supports_state'] = True
         kwargs['maintains_state'] = True
-        argument_spec.update(
-            dict(resource_id=dict(),
-                 depends_on=dict(type='list'),
-                 _state=dict(type='dict'),
-                 verify_state=dict(type='bool', default=False),
-                 enforce_state=dict(type='bool', default=False),
-                 state=dict(choices=['present', 'absent']),
-            )
+        default_argument_spec = dict(
+            resource_id=dict(),
+            depends_on=dict(type='list'),
+            _state=dict(type='dict'),
+            verify_state=dict(type='bool', default=False),
+            enforce_state=dict(type='bool', default=False),
+            state=dict(choices=['present', 'absent']),
         )
-        super(AnsibleStateModule, self).__init__(argument_spec, **kwargs)
+
+        argument_spec = kwargs.get('argument_spec', {})
+        default_argument_spec.update(argument_spec)
+        kwargs['argument_spec'] = default_argument_spec
+
+        super(AnsibleStateModule, self).__init__(**kwargs)
         self.diff_ignore = []
+        self.computed_sentinel = COMPUTED_SENTINEL
 
     def compare(self, before, after):
         if before == after:
@@ -42,11 +50,11 @@ class AnsibleStateModule(AnsibleModule):
             return {'before': None, 'after': after}
         if not after:
             return {'before': before, 'after': None}
-        before = dict((k, before[k]) for k in set(before.keys()).difference(self.diff_ignore)
+        left = dict((k, before[k]) for k in set(before.keys()).difference(self.diff_ignore)
                       if before.get(k) != after.get(k))
-        after = dict((k, after[k]) for k in set(after.keys()).difference(self.diff_ignore)
+        right = dict((k, after[k]) for k in set(after.keys()).difference(self.diff_ignore)
                      if before.get(k) != after.get(k))
-        return {'before': before, 'after': after}
+        return {'before': left, 'after': right}
 
     def run(self):
         # state strategy will pass in empty dict when no state exists,
@@ -75,13 +83,13 @@ class AnsibleStateModule(AnsibleModule):
         if state == 'present':
             desired = self.predict(existing)
             changed = False
-            if existing and existing['state'] == state:
+            if existing and existing.get('state', state) == state:
                 diff = self.compare(existing, desired)
                 if diff:
                     if not self.check_mode:
                         desired = self.update(existing)
                         diff = self.compare(existing, desired)
-                        changed = True
+                        changed = (diff != {})
             else:
                 if not self.check_mode:
                     desired = self.create()
@@ -99,6 +107,6 @@ class AnsibleStateModule(AnsibleModule):
             else:
                 desired = {'state': 'absent'}
                 if not self.check_mode:
-                    desired = self.delete()
+                    desired = self.delete(existing)
                 diff = self.compare(existing, {})
                 return dict(changed=True, diff=diff, _state=desired)

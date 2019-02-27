@@ -153,7 +153,7 @@ class AnsibleAWSModule(AnsibleModule):
         if response is not None:
             failure.update(**camel_dict_to_snake_dict(response))
 
-        self._module.fail_json(**failure)
+        self.fail_json(**failure)
 
     def _gather_versions(self):
         """Gather AWS SDK (boto3 and botocore) dependency versions
