@@ -218,9 +218,6 @@ class GCPRequestDifferenceTestCase(unittest.TestCase):
                     'test': 'value',
                     'foo': 'bar'
                 },
-                {
-                    'different': 'dict'
-                }
             ]
         }
         value2 = {
