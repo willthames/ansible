@@ -1,0 +1,20 @@
+---
+# tasks file for aws_eks modules
+- name: set up aws connection info
+  set_fact:
+    aws_connection_info: &aws_connection_info
+      aws_access_key: "{{ aws_access_key }}"
+      aws_secret_key: "{{ aws_secret_key }}"
+      security_token: "{{ security_token }}"
+      region: "{{ aws_region }}"
+  no_log: yes
+
+- name: create a VPC to work in
+  aws_v2_vpc:
+    resource_id: eks
+    cidr_block: 10.0.0.0/16
+    name: '{{ resource_prefix }}_aws_eks'
+    resource_tags:
+      Name: '{{ resource_prefix }}_aws_eks'
+    <<: *aws_connection_info
+  register: setup_vpc

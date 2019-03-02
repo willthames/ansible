@@ -1,0 +1,14 @@
+- hosts: localhost
+  connection: local
+
+  module_defaults:
+    group/aws:
+      aws_secret_key: "{{ aws_secret_key }}"
+      aws_access_key: "{{ aws_secret_key }}"
+      region: "{{ aws_region }}"
+
+  tasks:
+    - aws_v2_vpc:
+        cidr_block: 10.1.2.3/8
+        tags:
+          Name: "{{ resource_prefix }}-vpc"
