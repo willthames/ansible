@@ -55,6 +55,12 @@ except ImportError:
     from ansible.utils.display import Display
     display = Display()
 
+try:
+    from atomicwrites import atomic_write
+    HAS_ATOMICWRITES = True
+except ImportError:
+    HAS_ATOMICWRITES = False
+
 
 class AbsentState():
     def __init__(self):
@@ -161,6 +167,7 @@ class StrategyModule(StrategyBase):
                     task_vars['state'] = task.args['state']
                 else:
                     task_vars['state'] = self.play_context.state
+                    task.args['state'] = task_vars['state']
                 templar = Templar(loader=self._loader, variables=task_vars)
                 display.debug("done getting variables")
 
@@ -240,22 +247,22 @@ class StrategyModule(StrategyBase):
     def save_ansible_state(self):
         state_file = C.STATE_FILE
         parent_dir = os.path.dirname(state_file)
-        try:
-            if not os.path.exists(parent_dir):
-                os.makedirs(parent_dir)
-            afile = tempfile.NamedTemporaryFile()
-            header = "# ANSIBLE STATE FILE\n# VERSION 0.1\n# DO NOT MODIFY\n# %s\n" % datetime.datetime.utcnow().isoformat()
-            # Strip out results from modules that don't maintain state but that we use the results for dependency ordering
-            state_record = dict()
-            for action in self.learned_state:
-                action_records = dict((k, v) for (k, v) in self.learned_state[action].items()
-                                      if not isinstance(v, ExecutionRecord) and not isinstance(v, AbsentState))
-                if action_records:
-                    state_record[action] = action_records
-            afile.write(to_bytes(header + yaml.dump(state_record, Dumper=AnsibleDumper, default_flow_style=False)))
-            os.rename(afile.name, state_file)
-        except OSError as e:
-            raise AnsibleError("Couldn't write to state file %s: %s" % (state_file, to_text(e)))
+        if not os.path.exists(parent_dir):
+            os.makedirs(parent_dir)
+        header = "# ANSIBLE STATE FILE\n# VERSION 0.1\n# DO NOT MODIFY\n# %s\n" % datetime.datetime.utcnow().isoformat()
+        # Strip out results from modules that don't maintain state but that we use the results for dependency ordering
+        state_record = dict()
+        for action in self.learned_state:
+            action_records = dict((k, v) for (k, v) in self.learned_state[action].items()
+                                  if not isinstance(v, ExecutionRecord) and not isinstance(v, AbsentState))
+            if action_records:
+                state_record[action] = action_records
+
+        with atomic_write(state_file, overwrite=True) as afile:
+            try:
+                afile.write(header + yaml.dump(state_record, Dumper=AnsibleDumper, default_flow_style=False))
+            except Exception as e:
+                raise AnsibleError("Couldn't write to state file %s: %s" % (state_file, to_text(e)))
 
     def sort_removed_state(self):
         missing_state = dict()
@@ -277,6 +284,9 @@ class StrategyModule(StrategyBase):
         independent and run in parallel, this is only likely to happen when tasks
         run independently across hosts.
         '''
+
+        if not HAS_ATOMICWRITES:
+            raise AnsibleError("State strategy requires atomicwrites python library")
 
         result = self._tqm.RUN_OK
 
