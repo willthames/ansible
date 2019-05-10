@@ -7,14 +7,14 @@
       region: "{{ aws_region }}"
   no_log: true
 
-- name: create c4.large instance with cpu_options
+- name: create t3.nano instance with cpu_options
   ec2_instance:
-    name: "{{ resource_prefix }}-test-c4large-1-threads-per-core"
+    name: "{{ resource_prefix }}-test-t3nano-1-threads-per-core"
     image_id: "{{ ec2_ami_image[aws_region] }}"
     tags:
       TestId: "{{ resource_prefix }}"
     vpc_subnet_id: "{{ testing_subnet_a.subnet.id }}"
-    instance_type: c4.large
+    instance_type: t3.nano
     cpu_options:
         core_count: 1
         threads_per_core: 1
@@ -36,12 +36,12 @@
 - name: modify cpu_options on existing instance (warning displayed)
   ec2_instance:
     state: present
-    name: "{{ resource_prefix }}-test-c4large-1-threads-per-core"
+    name: "{{ resource_prefix }}-test-t3nano-1-threads-per-core"
     image_id: "{{ ec2_ami_image[aws_region] }}"
     tags:
       TestId: "{{ resource_prefix }}"
     vpc_subnet_id: "{{ testing_subnet_a.subnet.id }}"
-    instance_type: c4.large
+    instance_type: t3.nano
     volumes:
     - device_name: /dev/sda1
       ebs:
@@ -59,14 +59,14 @@
       - cpu_options_update is success
       - cpu_options_update is not changed
 
-- name: create c4.large instance with cpu_options(check mode)
+- name: create t3.nano instance with cpu_options(check mode)
   ec2_instance:
-    name: "{{ resource_prefix }}-test-c4large-1-threads-per-core-checkmode"
+    name: "{{ resource_prefix }}-test-t3nano-1-threads-per-core-checkmode"
     image_id: "{{ ec2_ami_image[aws_region] }}"
     tags:
       TestId: "{{ resource_prefix }}"
     vpc_subnet_id: "{{ testing_subnet_a.subnet.id }}"
-    instance_type: c4.large
+    instance_type: t3.nano
     cpu_options:
         core_count: 1
         threads_per_core: 1
@@ -80,7 +80,7 @@
 - name: "fact presented ec2 instance"
   ec2_instance_info:
     filters:
-      "tag:Name": "{{ resource_prefix }}-test-c4large-1-threads-per-core"
+      "tag:Name": "{{ resource_prefix }}-test-t3nano-1-threads-per-core"
       "instance-state-name": "running"
     <<: *aws_connection_info
   register: presented_instance_fact
@@ -88,7 +88,7 @@
 - name: "fact checkmode ec2 instance"
   ec2_instance_info:
     filters:
-      "tag:Name": "{{ resource_prefix }}-test-c4large-1-threads-per-core-checkmode"
+      "tag:Name": "{{ resource_prefix }}-test-t3nano-1-threads-per-core-checkmode"
       "instance-state-name": "running"
     <<: *aws_connection_info
   register: checkmode_instance_fact
