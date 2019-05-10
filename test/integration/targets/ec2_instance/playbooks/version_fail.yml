@@ -15,9 +15,9 @@
               region: "{{ aws_region }}"
           no_log: True
 
-        - name: Include vars file in roles/ec2_instance/defaults/main.yml
+        - name: Include vars file in {{ playbook_dir }}../defaults/main.yml
           include_vars:
-            file: 'roles/ec2_instance/defaults/main.yml'
+            file: '{{ playbook_dir }}/../defaults/main.yml'
 
         - name: create c4.large with cpu options (fails gracefully)
           ec2_instance:
