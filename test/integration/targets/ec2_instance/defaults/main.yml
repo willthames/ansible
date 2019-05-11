@@ -3,35 +3,35 @@
 ec2_instance_name: '{{ resource_prefix }}-node'
 ec2_instance_owner: 'integration-run-{{ resource_prefix }}'
 ec2_ami_image:
-  # https://wiki.centos.org/Cloud/AWS collected 2019-05-10
-    ap-northeast-1: ami-045f38c93733dd48d
-    ap-northeast-2: ami-06cf2a72dadf92410
-    ap-south-1: ami-02e60be79e78fef21
-    ap-southeast-1: ami-0b4dd9d65556cac22
-    ap-southeast-2: ami-08bd00d7713a39e7d
-    ca-central-1: ami-033e6106180a626d0
-    eu-central-1: ami-04cf43aca3e6f3de3
-    eu-west-1: ami-0ff760d16d9497662
-    eu-west-2: ami-0eab3a90fc693af19
-    sa-east-1: ami-0b8d86d4bf91850af
-    us-east-1: ami-02eac2c0129f6376b
-    us-east-2: ami-0f2b4fc905b0bd1f1
-    us-west-1: ami-074e2d6769f445be5
-    us-west-2: ami-01ed306a12b7d1c96
+  # Amazon Linux - collected 2019-05-10
+  ap-northeast-1: ami-016ad6443b4a3d960
+  ap-northeast-2: ami-0befa04e7b1ba50f9
+  ap-south-1: ami-04611067ce944d00f
+  ap-southeast-1: ami-00cbdef8d2acf44a7
+  ap-southeast-2: ami-0fbfb4926256a1f1e
+  ca-central-1: ami-08f0313c2834a2ff7
+  eu-central-1: ami-0f0debf49705e047c
+  eu-west-1: ami-06e710681e5ee07aa
+  eu-west-2: ami-096629e5eb19568cc
+  sa-east-1: ami-088018633b4291710
+  us-east-1: ami-02cc5b6cf82d354da
+  us-east-2: ami-0ec1948d5caef658a
+  us-west-1: ami-0c3ca2c6f4edb5546
+  us-west-2: ami-0b5913cdbba67598e
 
 # We need to use ENA enabled AMIs to get EBS optimized instances.
 ec2_ebs_optimized_ami_image:
-  ap-northeast-1: ami-00f9d04b3b3092052
-  ap-northeast-2: ami-0c764df09c35858b8
-  ap-south-1: ami-00796998f258969fd
-  ap-southeast-1: ami-085fd1bd447be68e8
-  ap-southeast-2: ami-0b8dea0e70b969adc
-  ca-central-1: ami-05cac140c6a1fb960
-  eu-central-1: ami-02ea8f348fa28c108
-  eu-west-1: ami-0a5e707736615003c
-  eu-west-2: ami-017b0e29fac27906b
-  sa-east-1: ami-0160a8b6087883cb6
-  us-east-1: ami-013be31976ca2c322
-  us-east-2: ami-0350c5670171b5391
-  us-west-1: ami-01beb64058d271bc4
-  us-west-2: ami-061e7ebbc234015fe
+  ap-northeast-1: ami-016ad6443b4a3d960
+  ap-northeast-2: ami-0befa04e7b1ba50f9
+  ap-south-1: ami-04611067ce944d00f
+  ap-southeast-1: ami-00cbdef8d2acf44a7
+  ap-southeast-2: ami-0fbfb4926256a1f1e
+  ca-central-1: ami-08f0313c2834a2ff7
+  eu-central-1: ami-0f0debf49705e047c
+  eu-west-1: ami-06e710681e5ee07aa
+  eu-west-2: ami-096629e5eb19568cc
+  sa-east-1: ami-088018633b4291710
+  us-east-1: ami-02cc5b6cf82d354da
+  us-east-2: ami-0ec1948d5caef658a
+  us-west-1: ami-0c3ca2c6f4edb5546
+  us-west-2: ami-0b5913cdbba67598e
