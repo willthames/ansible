@@ -14,7 +14,7 @@ ec2_ami_image:
   eu-west-1: ami-06e710681e5ee07aa
   eu-west-2: ami-096629e5eb19568cc
   sa-east-1: ami-088018633b4291710
-  us-east-1: ami-02cc5b6cf82d354da
+  us-east-1: ami-0de53d8956e8dcf80
   us-east-2: ami-0ec1948d5caef658a
   us-west-1: ami-0c3ca2c6f4edb5546
   us-west-2: ami-0b5913cdbba67598e
