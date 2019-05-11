@@ -21,6 +21,7 @@
     volumes:
     - device_name: /dev/sda1
       ebs:
+        size: 10
         delete_on_termination: true
     <<: *aws_connection_info
   register: instance_creation
@@ -45,6 +46,7 @@
     volumes:
     - device_name: /dev/sda1
       ebs:
+        size: 10
         delete_on_termination: true
     cpu_options:
         core_count: 1
@@ -73,6 +75,7 @@
     volumes:
     - device_name: /dev/sda1
       ebs:
+        size: 10
         delete_on_termination: true
     <<: *aws_connection_info
   check_mode: yes
