@@ -37,10 +37,6 @@
         security_groups: "{{ sg.group_id }}"
         instance_type: t2.micro
         instance_role: "{{ resource_prefix }}-test-policy"
-        volumes:
-        - device_name: /dev/sda1
-          ebs:
-            delete_on_termination: true
         <<: *aws_connection_info
       register: instance_with_role
 
@@ -55,10 +51,6 @@
         security_groups: "{{ sg.group_id }}"
         instance_type: t2.micro
         instance_role: "{{ resource_prefix }}-test-policy"
-        volumes:
-        - device_name: /dev/sda1
-          ebs:
-            delete_on_termination: true
         <<: *aws_connection_info
       check_mode: yes
 
@@ -66,7 +58,6 @@
       ec2_instance_info:
         filters:
           "tag:Name": "{{ resource_prefix }}-test-instance-role"
-          "instance-state-name": "running"
         <<: *aws_connection_info
       register: presented_instance_fact
 
@@ -74,7 +65,6 @@
       ec2_instance_info:
         filters:
           "tag:Name": "{{ resource_prefix }}-test-instance-role-checkmode"
-          "instance-state-name": "running"
         <<: *aws_connection_info
       register: checkmode_instance_fact
 
