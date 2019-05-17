@@ -167,4 +167,4 @@
   assert:
     that:
       - check_tags.instances[0].tags.Name.startswith(resource_prefix)
-      - check_tags.instances[0].state.name == 'running'
+      - "'{{ check_tags.instances[0].state.name }}' == 'running'"
