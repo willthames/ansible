@@ -22,6 +22,7 @@
       source_dest_check: false
     vpc_subnet_id: "{{ testing_subnet_b.subnet.id }}"
     instance_type: t2.micro
+    wait: false
     <<: *aws_connection_info
   register: in_test_vpc
 
