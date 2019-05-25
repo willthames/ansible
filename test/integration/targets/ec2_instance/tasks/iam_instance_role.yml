@@ -83,6 +83,8 @@
         instance_role: "ansible-test-sts-{{ resource_prefix }}-test-policy-2"
         <<: *aws_connection_info
       register: instance_with_updated_role
+      until: instance_with_updated_role is not failed
+      retries: 10
 
     - assert:
         that:
