@@ -119,6 +119,7 @@
     filters:
       tag:TestId: "{{ resource_prefix }}"
     state: absent
+    wait: false
     <<: *aws_connection_info
   register: result
 - assert:
