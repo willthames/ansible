@@ -24,4 +24,9 @@
     - include_tasks: instance_no_wait.yml
 
   always:
+    - name: Check we're in CI
+      set_fact:
+        ci_run: "{{ lookup('env', 'ANSIBLE_TEST_CI') }}"
+
     - include_tasks: env_cleanup.yml
+      when: ci_run != 'shippable'
