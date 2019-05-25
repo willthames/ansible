@@ -139,12 +139,3 @@
     name: "{{ resource_prefix }}_test_key"
     state: absent
     <<: *aws_connection_info
-
-- ec2_eni:
-    eni_id: "{{ item }}"
-    state: absent
-    <<: *aws_connection_info
-  with_items:
-    - "{{ eni_a.interface.id }}"
-    - "{{ eni_b.interface.id }}"
-    - "{{ eni_c.interface.id }}"
