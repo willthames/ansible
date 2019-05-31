@@ -151,7 +151,7 @@
         that:
           - '"{{ confirm_checkmode_terminatedinstance_fact.instances[0].state.name }}" != "terminated"'
 
-    - name: Terminate instance in check mode.
+    - name: Terminate instance.
       ec2_instance:
         name: "{{ resource_prefix }}-checkmode-comparison"
         state: absent
