@@ -10,7 +10,6 @@
 
 - block:
 
-
     - include_tasks: env_setup.yml
     - include_tasks: cpu_options.yml
     - include_tasks: termination_protection.yml
@@ -24,9 +23,5 @@
     - include_tasks: instance_no_wait.yml
 
   always:
-    - name: Check we're in CI
-      set_fact:
-        ci_run: "{{ lookup('env', 'ANSIBLE_TEST_CI') }}"
-
     - include_tasks: env_cleanup.yml
-      when: ci_run != 'shippable'
+      when: aws_cleanup
