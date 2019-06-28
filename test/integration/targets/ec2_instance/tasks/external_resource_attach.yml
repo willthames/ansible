@@ -23,7 +23,7 @@
   register: eni_b
 - ec2_eni:
     delete_on_termination: true
-    subnet_id: "{{ testing_subnet_b.subnet.id }}"
+    subnet_id: "{{ testing_subnet_c.subnet.id }}"
     security_groups:
       - "{{ sg.group_id }}"
     <<: *aws_connection_info
