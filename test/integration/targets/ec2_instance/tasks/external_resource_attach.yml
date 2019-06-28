@@ -49,8 +49,8 @@
     <<: *aws_connection_info
   register: in_test_vpc
 
-- name: "Gather {{ resource_prefix }}-test-eni-vpc facts"
-  ec2_instance_facts:
+- name: "Gather {{ resource_prefix }}-test-eni-vpc info"
+  ec2_instance_info:
     filters:
       "tag:Name": '{{ resource_prefix }}-test-eni-vpc'
     <<: *aws_connection_info
