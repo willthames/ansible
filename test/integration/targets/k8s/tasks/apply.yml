@@ -103,6 +103,9 @@
           metadata:
             name: "apply-configmap"
             namespace: "{{ apply_namespace }}"
+            annotations:
+              this: one
+              hello: world
           data:
             one: "1"
             three: "3"
@@ -116,6 +119,28 @@
           - k8s_configmap_3 is changed
           - "'four' in k8s_configmap_3.result.data"
           - "'two' not in k8s_configmap_3.result.data"
+          - "'annotations' in k8s_configmap_3.result.metadata"
+
+    - name: remove annotations
+      k8s:
+        definition:
+          kind: ConfigMap
+          apiVersion: v1
+          metadata:
+            name: "apply-configmap"
+            namespace: "{{ apply_namespace }}"
+          data:
+            one: "1"
+            three: "3"
+            four: "4"
+        apply: yes
+      register: k8s_configmap_4
+
+    - name: ensure that configmap has been correctly updated
+      assert:
+        that:
+          - k8s_configmap_4 is changed
+          - "'annotations' not in k8s_configmap_4.result.metadata"
 
     - name: add a service
       k8s:
