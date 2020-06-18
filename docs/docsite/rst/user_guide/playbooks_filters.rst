@@ -1600,6 +1600,13 @@ To format a date using a string (like with the shell date command), use the "str
     {{ '%Y-%m-%d' | strftime(0) }}          # => 1970-01-01
     {{ '%Y-%m-%d' | strftime(1441357287) }} # => 2015-09-04
 
+.. versionadded:: 2.11
+strftime takes an optional UTC argument, defaulting to False, meaning times are in the local timezone::
+
+    {{ '%H:%M:%S' | strftime }}           # time now in local timezone
+    {{ '%H:%M:%S' | strftime(UTC=True) }} # time now in UTC
+
+
 .. note:: To get all string possibilities, check https://docs.python.org/2/library/time.html#time.strftime
 
 Kubernetes filters
