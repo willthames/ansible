@@ -907,6 +907,11 @@ class Templar:
                 raise
             else:
                 return variable
+        except TemplateSyntaxError as e:
+            if fail_on_undefined:
+                raise AnsibleError("template error while templating string: %s. String: %s" % (to_native(e), to_native(variable)))
+            else:
+                return variable
 
     def is_template(self, data):
         '''lets us know if data has a template'''
@@ -1098,7 +1103,10 @@ class Templar:
             try:
                 t = myenv.from_string(data)
             except TemplateSyntaxError as e:
-                raise AnsibleError("template error while templating string: %s. String: %s" % (to_native(e), to_native(data)))
+                if fail_on_undefined:
+                    raise AnsibleError("template error while templating string: %s. String: %s" % (to_native(e), to_native(data)))
+                else:
+                    return data
             except Exception as e:
                 if 'recursion' in to_native(e):
                     raise AnsibleError("recursive loop detected in template string: %s" % to_native(data))
